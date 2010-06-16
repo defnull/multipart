@@ -52,13 +52,6 @@ def parse_options_header(header, options=None):
         options[key] = value
     return ctype, options
 
-assert parse_options_header('form-data; name="Test"; filename="Test.txt"')[0] == 'form-data'
-assert parse_options_header('form-data; name="Test"; filename="Test.txt"')[1]['name'] == 'Test'
-assert parse_options_header('form-data; name="Test"; filename="Test.txt"')[1]['filename'] == 'Test.txt'
-assert parse_options_header('form-data; name="Test"; FileName="Test.txt"')[1]['filename'] == 'Test.txt'
-assert parse_options_header('form-data; filename="C:\\test\\bla.txt"')[1]['filename'] == 'bla.txt'
-assert parse_options_header('form-data; filename="\\\\test\\bla.txt"')[1]['filename'] == 'bla.txt'
-assert parse_options_header('form-data; name="cb_file_upload_multiple"; filename="\\\\192.168.1.5\\Users\\Dave\\2010 Meeting Minutes\\Sellersburg Town Council Meeting 02-22-2010doc.doc"')[1]['filename'] == 'Sellersburg Town Council Meeting 02-22-2010doc.doc'
 
 ##############################################################################
 ################################## Multipart ##################################
@@ -72,70 +65,107 @@ MAXDISK = 1024**3 # 1gb
 def tob(data, enc='utf8'): # Convert strings to bytes (py2 and py3)
     return data.encode(enc) if isinstance(data, unicode) else data
 
-def parse_line(line):
-    if line[-2:] == '\r\n': return line[:-2], '\r\n'
-    elif line[-1:] == '\n': return line[:-1], '\n'
-    elif line[-1:] == '\r': return line[:-1], '\r'
-    else:                   return line, ''
 
-assert parse_line('foo') == ('foo','')
-assert parse_line('foo\n') == ('foo','\n')
-assert parse_line('foo\r\n') == ('foo','\r\n')
-assert parse_line('foo\r') == ('foo','\r')
-assert parse_line('\n') == ('','\n')
-assert parse_line('\r\n') == ('','\r\n')
-assert parse_line('') == ('','')
-assert parse_line('\n\r') == ('\n','\r')
-
-def iterlines(fp, maxread=-1):
-    ''' Iterate over a binary file-like object line by line. Line endings are
-        preserved if the line fits into maxbuf. If not, the line is returned in
-        chuncks.
-    
-        :parm fp: A file-like object with a ``fp.read(size)`` method.
-        :parm maxread: The maximum number of bytes to read from the file.   
-    '''
-    read = fp.read
-    while 1:
-        lines = read(MAXBUF if maxread < 0 else min(MAXBUF, maxread))
-        maxread -= len(lines)
-        if not lines: break
-        for line in lines.splitlines(True):
-            yield line
-
-t = iterlines(io.BytesIO('abc\ndef\r\nghi\rfoo'))
-assert t.next() == 'abc\n'
-assert t.next() == 'def\r\n'
-assert t.next() == 'ghi\r'
-assert t.next() == 'foo'
-t = iterlines(io.BytesIO('abcde'), 3)
-assert t.next() == 'abc'
-t = iterlines(io.BytesIO(('abc'*MAXBUF)+'x\n'))
-assert len(t.next()) == MAXBUF
-assert len(t.next()) == MAXBUF
-assert len(t.next()) == MAXBUF
-assert t.next() == 'x\n'
-del t
-
-def copy_file(stream, target, maxread=-1):
+def copy_file(stream, target, maxread=-1, bufsize=MAXBUF):
     ''' Read from :stream and write to :target until :maxread or EOF. '''
-    size = 0
+    size, read = 0, stream.read
     while 1:
-        part = stream.read(MAXBUF if maxread < 0 else min(MAXBUF, maxread-size))
+        part = read(bufsize if maxread < 0 else min(bufsize, maxread-size))
         if not part: return size
         target.write(part)
         size += len(part)
-    return size
 
-t = io.BytesIO()
-assert copy_file(io.BytesIO('abc'), t) == 3
-t.seek(0)
-assert t.read() == 'abc'
-del t
 
 class MultipartError(ValueError): pass
 
+
+class MultipartParser(object):
+    disk_limit = 1024**3
+    mem_limit = 1024**2
+    buffer_size = 10*1024
+    
+    def __init__(self, stream, boundary, content_length=-1):
+        ''' Parse a multipart/form-data byte stream. This object is an iterator
+            over the parts of the message.
+            
+            :param stream: A file-like stream. Must implement ``.read(size)``.
+            :param boundary: The multipart boundary as a byte string.
+            :param content_length: The maximum number of bytes to read.
+        '''
+        self.stream, self.boundary = stream, boundary
+        self.content_length = content_length
+        self._done = []
+        self._part_iter = None
+        if self.buffer_size <= len(boundary):
+            raise MultipartError('Boundary larger than buffer_size.')
+    
+    def __iter__(self):
+        ''' Iterate over the parts of the multipart message. '''
+        return self.parts
+    
+    @property
+    def parts(self):
+        ''' An iterator over the parts of the multipart message. '''
+        if not self._part_iter:
+            self._part_iter = self._iterparse()
+        for part in self._done:
+            yield part
+        for part in self._part_iter:
+            self._done.append(part)
+            yield part
+    
+    def _lineiter(self):
+        ''' Iterate over a binary file-like object line by line. Each line is
+            returned as a (line, line_ending) tuple. If the line does not fit
+            into self.buffer_size, line_ending is empty and the rest of the line
+            is returned with the next iteration.
+        '''
+        read = self.stream.read
+        maxread, maxbuf = self.content_length, self.buffer_size
+        while 1:
+            lines = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
+            maxread -= len(lines)
+            if not lines: break
+            for line in lines.splitlines(True):
+                if line[-2:] == '\r\n': yield line[:-2], '\r\n'
+                elif line[-1:] == '\n': yield line[:-1], '\n'
+                # elif line[-1:] == '\r': yield line[:-1], '\r'
+                # Not supported. maxbuf could cut between \r and \n
+                else:                   yield line, ''
+     
+    def _iterparse(self):
+        lines, line = self._lineiter(), ''
+        separator, terminator = '--'+self.boundary, '--'+self.boundary+'--'
+        # Consume first boundary. Ignore leading blank lines
+        for line, nl in lines:
+            if line: break
+        if line != separator:
+            raise MultipartError("Stream does not start with boundary")
+        # For each part in stream...
+        part = MultipartPart()
+        mem_limit, disk_limit = self.mem_limit, self.disk_limit
+        for line, nl in lines:
+            if line == terminator:
+                yield part
+                break
+            elif line == separator:
+                yield part
+                if part.is_buffered(): mem_limit  -= part.size
+                else:                  disk_limit -= part.size
+                part = MultipartPart()
+            else:
+                part.feed(line, nl)
+                if part.is_buffered() and mem_limit <= part.size:
+                    raise MultipartError("Memory limit reached.")
+                elif not part.is_buffered() and disk_limit <= part.size:
+                    raise MultipartError("Disk limit reached.")
+        if line != terminator:
+            raise MultipartError("Unexpected end of multipart stream.")
+
+
 class MultipartPart(object):
+    mem_limit = 500*1024
+    
     def __init__(self):
         self.headerlist = []
         self.headers = Headers(self.headerlist)
@@ -145,11 +175,12 @@ class MultipartPart(object):
         self.disposition, self.name, self.filename = None, None, None
         self.content_type, self.charset = None, None
 
-    def write(self, line):
-        self.write_body(line) if self.file else self.write_header(line)
+    def feed(self, line, nl=''):
+        if self.file:
+            return self.write_body(line, nl)
+        return self.write_header(line, nl)
 
-    def write_header(self, line):
-        line, nl = parse_line(line)
+    def add_header(self, line, nl):
         line = line.decode(self.charset or 'latin9')
         if not nl: raise MultipartError('Unexpected end of line in header.')
         if not line.strip(): # blank line -> end of header segment
@@ -163,15 +194,14 @@ class MultipartPart(object):
             name, value = line.split(':', 1)
             self.headerlist.append((name.strip(), value.strip()))
 
-    def write_body(self, line):
-        if not line: return # This does not even flush the buffer
-        line, nl = parse_line(line)
+    def add_body(self, line, nl):
+        if not line and not nl: return # This does not even flush the buffer
         self.size += len(line) + len(self._buf)
         self.file.write(self._buf + line)
         self._buf = nl
         if self.content_length > 0 and self.size > self.content_length:
             raise MultipartError('Size of body exceeds Content-Length header.')
-        if self.size > MAXMEMFILE and isinstance(self.file, io.BytesIO):
+        if self.size > self.mem_limit and isinstance(self.file, io.BytesIO):
             self.file, old = TemporaryFile(mode='w+b'), self.file
             old.seek(0)
             file_copy(old, self.file, self.size)
@@ -206,42 +236,6 @@ class MultipartPart(object):
             size = copy_file(self.file, fp)
         return size
 
-def parse_multipart(stream, boundary, content_length=-1):
-    ''' Yield :class:`MultipartPart` instances from an multipart byte stream.
-    
-        :param stream: A file-like stream. Must implement ``.read(size)``.
-        :param boundary: The multipart boundary as a byte string.
-        :param content_length: The maximum number of bytes to read. 
-    '''
-    lines, line = iterlines(stream, content_length), ''
-    separator, terminator = '--'+boundary, '--'+boundary+'--'
-    # Consume first boundary. Ignore leading blank lines
-    for line in lines:
-        if line.strip(): break
-    if not line or parse_line(line)[0] != separator:
-        raise MultipartError("Stream does not start with boundary")
-    # For each part in stream...
-    part = MultipartPart()
-    mem_limit, disk_limit = MAXMEM, MAXDISK
-    for line in lines:
-        line, nl = parse_line(line)
-        if line == terminator:
-            yield part
-            break
-        elif line == separator:
-            yield part
-            if part.is_buffered(): mem_limit  -= part.size
-            else:                  disk_limit -= part.size
-            part = MultipartPart()
-        else:
-            part.write(line+nl)
-            if part.is_buffered() and mem_limit <= part.size:
-                raise MultipartError("Memory limit reached. Increase MAXMEM.")
-            elif not part.is_buffered() and disk_limit <= part.size:
-                raise MultipartError("Disk limit reached. Increase MAXDISK.")
-    if line != terminator:
-        raise MultipartError("Unexpected end of multipart stream.")
-
 ##############################################################################
 #################################### WSGI ####################################
 ##############################################################################
@@ -262,7 +256,7 @@ def parse_form_data(environ, charset='utf8', strict=False):
     try:
         if environ.get('REQUEST_METHOD','GET').upper() not in ('POST', 'PUT'):
             raise MultipartError("Request method other than POST or PUT.")
-        content_length = min(int(environ.get('CONTENT_LENGTH', '-1')), MAXDISK)
+        content_length = int(environ.get('CONTENT_LENGTH', '-1'))
         content_type = environ.get('CONTENT_TYPE', '')
         if not content_type:
             raise MultipartError("Missing Content-Type header.")
@@ -273,7 +267,7 @@ def parse_form_data(environ, charset='utf8', strict=False):
             boundary = options.get('boundary','')
             if not boundary:
                 raise MultipartError("No boundary for multipart/form-data.")
-            for part in parse_multipart(stream, boundary, content_length):
+            for part in MultipartParser(stream, boundary, content_length):
                 codec = part.charset or charset
                 name = part.name.decode(codec) if part.name else None
                 if part.filename:
@@ -282,12 +276,12 @@ def parse_form_data(environ, charset='utf8', strict=False):
                     forms[name] = part.value.decode(codec)
         elif content_type in ('application/x-www-form-urlencoded',
                               'application/x-url-encoded'):
-            if content_length > MAXMEM:
+            if content_length > MultipartParser.mem_limit:
                 raise MultipartError("Request to big. Increase MAXMEM.")
-            data = stream.read(MAXMEM).decode(charset)
+            data = stream.read(MultipartParser.mem_limit).decode(charset)
             for key, value in urlparse.parse_qs(data, keep_blank_values=True):
                 forms[key] = value
-        elif strict:
+        else:
             raise MultipartError("Unsupported content type.")
     except MultipartError:
         if strict: raise
