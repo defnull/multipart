@@ -27,6 +27,18 @@ TODO
 ################################ Header Parser ################################
 ##############################################################################
 
+_special = re.escape('()<>@,;:\\"/[]?={} \t\n\r')
+_re_special = re.compile('[%s]' % _special)
+_qstr = '"(?:\\\\.|[^"])*"' # Quoted string
+_value = '(?:[^%s]+|%s)' % (_special, _qstr) # Save or quoted string
+_option = '(?:;|^)\s*([^%s]+)\s*=\s*(%s)' % (_special, _value)
+_re_option = re.compile(_option) # key=value part of an Content-Type like header
+
+def header_quote(val):
+    if not _re_special.match(val):
+        return val
+    return '"' + val.replace('\\','\\\\').replace('"','\\"') + '"'
+
 def header_unquote(val, filename=False):
     if val[0] == val[-1] == '"':
         val = val[1:-1]
@@ -34,12 +46,6 @@ def header_unquote(val, filename=False):
             val = val.split('\\')[-1] # fix ie6 bug: full path --> filename
         return val.replace('\\\\','\\').replace('\\"','"')
     return val
-
-_str = '[^\\(\\)\\<\\>\\@\\,\\;\\:\\\\\\"\\/\\[\\]\\?\\=\\{\\}\\ \\\t]+'
-_qstr = '"(?:\\\\.|[^"])*"' # Quoted string
-_value = '(?:%s|%s)' % (_str, _qstr) # Save or quoted string
-_option = '(?:;|^)\s*(%s)\s*=\s*(%s)' % (_str, _value) # key=value part of an options header
-_re_option = re.compile(_option)
 
 def parse_options_header(header, options=None):
     if ';' not in header:
@@ -52,25 +58,19 @@ def parse_options_header(header, options=None):
         options[key] = value
     return ctype, options
 
-
 ##############################################################################
 ################################## Multipart ##################################
 ##############################################################################
 
-MAXBUF = 10*1024 # 10kb
-MAXMEMFILE = 500*1024  # 500kb
-MAXMEM = 1024**2 # 1mb
-MAXDISK = 1024**3 # 1gb
-
 def tob(data, enc='utf8'): # Convert strings to bytes (py2 and py3)
     return data.encode(enc) if isinstance(data, unicode) else data
 
-
-def copy_file(stream, target, maxread=-1, bufsize=MAXBUF):
+def copy_file(stream, target, maxread=-1, buffer_size=2*16):
     ''' Read from :stream and write to :target until :maxread or EOF. '''
     size, read = 0, stream.read
     while 1:
-        part = read(bufsize if maxread < 0 else min(bufsize, maxread-size))
+        to_read = buffer_size if maxread < 0 else min(buffer_size, maxread-size)
+        part = read(to_read)
         if not part: return size
         target.write(part)
         size += len(part)
@@ -82,7 +82,8 @@ class MultipartError(ValueError): pass
 class MultipartParser(object):
     
     def __init__(self, stream, boundary, content_length=-1,
-                 disk_limit=2**30, mem_limit=2**20, buffer_size=2*16):
+                 disk_limit=2**30, mem_limit=2**20, memfile_limit=2**18,
+                 buffer_size=2*16):
         ''' Parse a multipart/form-data byte stream. This object is an iterator
             over the parts of the message.
             
@@ -93,6 +94,7 @@ class MultipartParser(object):
         self.stream, self.boundary = stream, boundary
         self.content_length = content_length
         self.disk_limit = disk_limit
+        self.memfile_limit = memfile_limit
         self.mem_limit = min(mem_limit, self.disk_limit)
         self.buffer_size = min(buffer_size, self.mem_limit)
         if self.buffer_size - 5 < len(boundary): # "--boundary--\n"
@@ -146,7 +148,9 @@ class MultipartParser(object):
         # For each part in stream...
         mem_used, disk_used = 0, 0 # Track used resources to prevent DoS
         is_tail = False # True if the last line was incomplete (cutted)
-        part = MultipartPart()
+        opts = {'buffer_size': self.buffer_size,
+                'memfile_limit': self.memfile_limit}
+        part = MultipartPart(**opts)
         for line, nl in lines:
             if line == terminator and not is_tail:
                 yield part
@@ -155,7 +159,7 @@ class MultipartParser(object):
                 if part.is_buffered(): mem_used += part.size
                 else: disk_used += part.size
                 yield part
-                part = MultipartPart()
+                part = MultipartPart(**opts)
             else:
                 is_tail = not nl # The next line continues this one
                 part.feed(line, nl)
@@ -169,9 +173,8 @@ class MultipartParser(object):
             
 
 class MultipartPart(object):
-    mem_limit = 500*1024
     
-    def __init__(self):
+    def __init__(self, buffer_size=2**16, memfile_limit=2**19):
         self.headerlist = []
         self.headers = Headers(self.headerlist)
         self.file = False
@@ -179,6 +182,8 @@ class MultipartPart(object):
         self._buf = ''
         self.disposition, self.name, self.filename = None, None, None
         self.content_type, self.charset = None, None
+        self.memfile_limit = memfile_limit
+        self.buffer_size = buffer_size
 
     def feed(self, line, nl=''):
         if self.file:
@@ -206,10 +211,10 @@ class MultipartPart(object):
         self._buf = nl
         if self.content_length > 0 and self.size > self.content_length:
             raise MultipartError('Size of body exceeds Content-Length header.')
-        if self.size > self.mem_limit and isinstance(self.file, io.BytesIO):
+        if self.size > self.memfile_limit and isinstance(self.file, io.BytesIO):
             self.file, old = TemporaryFile(mode='w+b'), self.file
             old.seek(0)
-            file_copy(old, self.file, self.size)
+            file_copy(old, self.file, self.size, self.buffer_size)
 
     def finish_header(self):
         self.file = io.BytesIO()
@@ -292,235 +297,4 @@ def parse_form_data(environ, charset='utf8', strict=False):
     except MultipartError:
         if strict: raise
     return forms, files
-
-"""
-    werkzeug.formparser test
-    ~~~~~~~~~~~~~~~~~~~~~~~~
-
-    Tests the form parsing capabilties.  Some of them are also tested from
-    the wrappers.
-
-    :copyright: (c) 2010 by the Werkzeug Team, see AUTHORS for more details.
-    :license: BSD, see LICENSE for more details.
-"""
-
-##############################################################################
-#################################### Tests ####################################
-##############################################################################
-
-def test_multipart():
-    """Tests multipart parsing against data collected from webbrowsers"""
-    from os.path import join, dirname
-    resources = join(dirname(__file__), 'multipart')
-
-    repository = [
-        ('firefox3-2png1txt', '---------------------------186454651713519341951581030105', [
-            (u'anchor.png', 'file1', 'image/png', 'file1.png'),
-            (u'application_edit.png', 'file2', 'image/png', 'file2.png')
-        ], u'example text'),
-        ('firefox3-2pnglongtext', '---------------------------14904044739787191031754711748', [
-            (u'accept.png', 'file1', 'image/png', 'file1.png'),
-            (u'add.png', 'file2', 'image/png', 'file2.png')
-        ], u'--long text\r\n--with boundary\r\n--lookalikes--'),
-        ('opera8-2png1txt', '----------zEO9jQKmLc2Cq88c23Dx19', [
-            (u'arrow_branch.png', 'file1', 'image/png', 'file1.png'),
-            (u'award_star_bronze_1.png', 'file2', 'image/png', 'file2.png')
-        ], u'blafasel öäü'),
-        ('webkit3-2png1txt', '----WebKitFormBoundaryjdSFhcARk8fyGNy6', [
-            (u'gtk-apply.png', 'file1', 'image/png', 'file1.png'),
-            (u'gtk-no.png', 'file2', 'image/png', 'file2.png')
-        ], u'this is another text with ümläüts'),
-        ('ie6-2png1txt', '---------------------------7d91b03a20128', [
-            (u'file1.png', 'file1', 'image/x-png', 'file1.png'),
-            (u'file2.png', 'file2', 'image/x-png', 'file2.png')
-        ], u'ie6 sucks :-/')
-    ]
-
-    for name, boundary, files, text in repository:
-        folder = join(resources, name)
-        data = open(join(folder, 'request.txt'), 'rb')
-        data.seek(0)
-        result = list(parse_multipart(data, boundary))
-        for part in result:
-            if part.filename:
-                tfilename, tname, tctype, tfile = files.pop(0)
-                print repr(tfilename), repr(part.filename)
-                assert tfilename == part.filename
-                assert tname == part.name
-                assert tctype == part.content_type
-                part.file.seek(0)
-                assert open(join(folder, tfile),'rb').read() == part.file.read()
-                assert open(join(folder, tfile),'rb').read() == part.value
-            else:
-                assert part.value.decode(part.charset or 'utf8') == text
-    return True
-
-assert test_multipart()
-
-def test_end_of_file_multipart():
-    """Test for multipart files ending unexpectedly"""
-    # This test looks innocent but it was actually timeing out in
-    # the Werkzeug 0.5 release version (#394)
-    data = (
-        '--foo\r\n'
-        'Content-Disposition: form-data; name="test"; filename="test.txt"\r\n'
-        'Content-Type: text/plain\r\n\r\n'
-        'file contents and no end'
-    )
-    try:
-        return list(parse_multipart(io.BytesIO(data), 'foo'))
-    except Exception, e:
-        return e
-
-assert isinstance(test_end_of_file_multipart(), MultipartError)
-assert test_end_of_file_multipart().args[0] == 'Unexpected end of multipart stream.'
-
-def test_parse_form_data_put_without_content():
-    """A PUT without a Content-Type header returns empty data
-
-    Both rfc1945 and rfc2616 (1.0 and 1.1) say "Any HTTP/[1.0/1.1] message
-    containing an entity-body SHOULD include a Content-Type header field
-    defining the media type of that body."  In the case where either
-    headers are omitted, parse_form_data should still work.
-    """
-    env = {}
-    env['REQUEST_METHOD']='POST'
-    form, files = parse_form_data(env)
-    assert len(form) == 0
-    assert len(files) == 0
-    return True
-
-assert test_parse_form_data_put_without_content()
-
-def test_parse_form_data_get_without_content():
-    """GET requests without data, content type and length returns no data"""
-    env = {}
-    env['REQUEST_METHOD'] = 'GET'
-    form, files = parse_form_data(env)
-    assert len(form) == 0
-    assert len(files) == 0
-    return True
-
-assert test_parse_form_data_get_without_content()
-
-def test_broken_multipart():
-    """Broken multipart does not break the applicaiton"""
-    data = (
-        '--foo\r\n'
-        'Content-Disposition: form-data; name="test"; filename="test.txt"\r\n'
-        'Content-Transfer-Encoding: base64\r\n'
-        'Content-Type: text/plain\r\n\r\n'
-        'broken base 64'
-        '--foo--'
-    )
-    data = io.BytesIO(data)
-    data.seek(0)
-    env = {}
-    env['REQUEST_METHOD'] = 'POST'
-    env['CONTENT_TYPE'] = 'multipart/form-data; boundary=foo'
-    env['wsgi.input'] = data
-    try:
-        form, files = parse_form_data(env, strict=True)
-    except MultipartError, e:
-        return e
-
-#TODO: actually test base64 errors...
-assert isinstance(test_broken_multipart(), MultipartError)
-assert test_broken_multipart().args[0] == 'Unexpected end of multipart stream.'
-
-
-def test_multipart_file_no_content_type():
-    """Chrome does not always provide a content type."""
-    data = (
-        '--foo\r\n'
-        'Content-Disposition: form-data; name="test"; filename="test.txt"\r\n\r\n'
-        'file contents\r\n--foo--'
-    )
-    data = io.BytesIO(data)
-    data.seek(0)
-    env = {}
-    env['REQUEST_METHOD'] = 'POST'
-    env['CONTENT_TYPE'] = 'multipart/form-data; boundary=foo'
-    env['wsgi.input'] = data
-    forms, files = parse_form_data(env, strict=True)
-    assert files['test'].filename == 'test.txt'
-    assert files['test'].value == 'file contents'
-    return True
-
-assert test_multipart_file_no_content_type()
-
-
-def test_extra_newline_multipart():
-    """Test for multipart uploads with extra newlines"""
-    # this test looks innocent but it was actually timeing out in
-    # the Werkzeug 0.5 release version (#394)
-    data = (
-        '\r\n\r\n--foo\r\n'
-        'Content-Disposition: form-data; name="foo"\r\n\r\n'
-        'a string\r\n'
-        '--foo--'
-    )
-    data = io.BytesIO(data)
-    data.seek(0)
-    env = {}
-    env['REQUEST_METHOD'] = 'POST'
-    env['CONTENT_TYPE'] = 'multipart/form-data; boundary=foo'
-    env['wsgi.input'] = data
-    forms, files = parse_form_data(env, strict=True)
-    assert not files
-    assert forms['foo'] == 'a string'
-    return True
-
-assert test_extra_newline_multipart()
-
-
-def test_multipart_headers():
-    """Test access to multipart headers"""
-    data = ('--foo\r\n'
-            'Content-Disposition: form-data; name="foo"; filename="foo.txt"\r\n'
-            'X-Custom-Header: bla\r\n'
-            'Content-Type: text/plain; charset=utf-8\r\n\r\n'
-            'file contents, just the contents\r\n'
-            '--foo--')
-    data = io.BytesIO(data)
-    data.seek(0)
-    env = {}
-    env['REQUEST_METHOD'] = 'POST'
-    env['CONTENT_TYPE'] = 'multipart/form-data; boundary=foo'
-    env['wsgi.input'] = data
-    forms, files = parse_form_data(env, strict=True)
-    assert files['foo'].content_type == 'text/plain'
-    assert files['foo'].headers['content-type'] == 'text/plain; charset=utf-8'
-    assert files['foo'].headers['x-custom-header'] == 'bla'
-    return True
-
-assert test_multipart_headers()
-
-
-def test_nonstandard_line_endings():
-    """Test nonstandard line endings of multipart form data"""
-    for nl in '\n', '\r', '\r\n':
-        data = nl.join((
-            '--foo',
-            'Content-Disposition: form-data; name=foo',
-            '',
-            'this is just bar',
-            '--foo',
-            'Content-Disposition: form-data; name=bar',
-            '',
-            'blafasel',
-            '--foo--'
-        ))
-        data = io.BytesIO(data)
-        data.seek(0)
-        env = {}
-        env['REQUEST_METHOD'] = 'POST'
-        env['CONTENT_TYPE'] = 'multipart/form-data; boundary=foo'
-        env['wsgi.input'] = data
-        forms, files = parse_form_data(env, strict=True)
-        assert forms['foo'] == 'this is just bar'
-        assert forms['bar'] == 'blafasel'
-        return True
-
-assert test_nonstandard_line_endings()
 
