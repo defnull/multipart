@@ -3,6 +3,11 @@ import unittest
 import sys, os.path
 import multipart
 
+#TODO: bufsize=10, line=1234567890--boundary\n
+#TODO: bufsize < len(boundary) (should not be possible)
+#TODO: bufsize = len(boundary)+5 (edge case)
+#TODO: At least one test per possible exception (100% coverage)
+
 class TestHeaderParser(unittest.TestCase):
 
     def test_token_unquote(self):

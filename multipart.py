@@ -80,11 +80,9 @@ class MultipartError(ValueError): pass
 
 
 class MultipartParser(object):
-    disk_limit = 1024**3
-    mem_limit = 1024**2
-    buffer_size = 10*1024
     
-    def __init__(self, stream, boundary, content_length=-1):
+    def __init__(self, stream, boundary, content_length=-1,
+                 disk_limit=2**30, mem_limit=2**20, buffer_size=2*16):
         ''' Parse a multipart/form-data byte stream. This object is an iterator
             over the parts of the message.
             
@@ -94,10 +92,14 @@ class MultipartParser(object):
         '''
         self.stream, self.boundary = stream, boundary
         self.content_length = content_length
+        self.disk_limit = disk_limit
+        self.mem_limit = min(mem_limit, self.disk_limit)
+        self.buffer_size = min(buffer_size, self.mem_limit)
+        if self.buffer_size - 5 < len(boundary): # "--boundary--\n"
+            raise MultipartError('Boundary does not fit into buffer_size.')
         self._done = []
         self._part_iter = None
-        if self.buffer_size <= len(boundary):
-            raise MultipartError('Boundary larger than buffer_size.')
+
     
     def __iter__(self):
         ''' Iterate over the parts of the multipart message. '''
@@ -142,26 +144,29 @@ class MultipartParser(object):
         if line != separator:
             raise MultipartError("Stream does not start with boundary")
         # For each part in stream...
+        mem_used, disk_used = 0, 0 # Track used resources to prevent DoS
+        is_tail = False # True if the last line was incomplete (cutted)
         part = MultipartPart()
-        mem_limit, disk_limit = self.mem_limit, self.disk_limit
         for line, nl in lines:
-            if line == terminator:
+            if line == terminator and not is_tail:
                 yield part
                 break
-            elif line == separator:
+            elif line == separator and not is_tail:
+                if part.is_buffered(): mem_used += part.size
+                else: disk_used += part.size
                 yield part
-                if part.is_buffered(): mem_limit  -= part.size
-                else:                  disk_limit -= part.size
                 part = MultipartPart()
             else:
+                is_tail = not nl # The next line continues this one
                 part.feed(line, nl)
-                if part.is_buffered() and mem_limit <= part.size:
-                    raise MultipartError("Memory limit reached.")
-                elif not part.is_buffered() and disk_limit <= part.size:
+                if part.is_buffered():
+                    if part.size + mem_used > self.mem_limit:
+                        raise MultipartError("Memory limit reached.")
+                elif part.size + disk_used > self.disk_limit:
                     raise MultipartError("Disk limit reached.")
         if line != terminator:
             raise MultipartError("Unexpected end of multipart stream.")
-
+            
 
 class MultipartPart(object):
     mem_limit = 500*1024
@@ -241,7 +246,7 @@ class MultipartPart(object):
 ##############################################################################
 
 def parse_form_data(environ, charset='utf8', strict=False):
-    ''' Parse form data from an environ dict and returns two :class:`MultiDict`
+    ''' Parse form data from an environ dict and return two :class:`MultiDict`
         instances. The first contains form fields with unicode keys and values.
         The second contains file uploads with unicode keys and
         :class:`MultipartPart` instances as values. Catch
@@ -249,7 +254,8 @@ def parse_form_data(environ, charset='utf8', strict=False):
         
         :param environ: An WSGI environment dict.
         :param charset: The charset to use if unsure. (default: utf8)
-        :param strict: If true, raise :exc:`MultipartError` on parsing errors.
+        :param strict: If True, raise :exc:`MultipartError` on parsing errors.
+                       These are silently ignored by default.
     '''
         
     forms, files = MultiDict(), MultiDict()
