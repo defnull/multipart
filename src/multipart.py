@@ -1,9 +1,36 @@
 # -*- coding: utf-8 -*-
-
 '''
+Parser for multipart/form-data
+==============================
+
 This module provides a parser for the multipart/form-data format. It can read
-from a file, a socket or an WSGI environment. The parser can be used to replace
+from a file, a socket or a WSGI environment. The parser can be used to replace
 cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
+
+Features
+--------
+
+  * Python 2.5+ and 3.x (2to3) support. No dependencies.
+  * Parses multipart/form-data and application/x-url-encoded.
+  * Produces useful error messages in 'strict'-mode.
+  * Uploads of unknown size (missing Content-Length header).
+  * Fast memory mapped files (io.BytesIO) for small uploads.
+  * Temporary files on disk for big uploads.
+  * Memory and disk resource limits to prevent DOS attacks.
+  * 100% test coverage.
+
+Compared to cgi.FieldStorage()
+------------------------------
+
+  * Reads directly from a socket (no ``.readline(n)``, just ``.read(n)``).
+  * Consumes bytes regardless of Python version.
+  * Is desgined for WSGI, not CGI.
+  * Is not broken.
+
+Todo
+----
+
+  * Support for base46 and quoted-printable transfer encoding.
 
 Licence (MIT)
 -------------
@@ -27,21 +54,6 @@ Licence (MIT)
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
-
-Features
---------
-
-[x] works in Python 2.5+ and 3.x (2to3).
- [x] consumes bytes regardless of Python version.
-[x] parses multipart and url-encoded data.
- [ ] support for base46 and quoted-printable transfer encoding
-[x] produces useful error messages.
- [x] supports uploads of unknown size (missing content-length header).
-[x] supports memory and disk resource limits to prevent DOS attacks.
- [x] uses fast memory mapped files (io.BytesIO) for small uploads.
- [x] uses temporary files for big uploads.
-[x] has no dependencies.
-[x] has 100% test coverage.
 
 '''
 
