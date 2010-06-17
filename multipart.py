@@ -83,7 +83,7 @@ class MultipartParser(object):
     
     def __init__(self, stream, boundary, content_length=-1,
                  disk_limit=2**30, mem_limit=2**20, memfile_limit=2**18,
-                 buffer_size=2*16):
+                 buffer_size=2**16):
         ''' Parse a multipart/form-data byte stream. This object is an iterator
             over the parts of the message.
             
@@ -101,7 +101,6 @@ class MultipartParser(object):
             raise MultipartError('Boundary does not fit into buffer_size.')
         self._done = []
         self._part_iter = None
-
     
     def __iter__(self):
         ''' Iterate over the parts of the multipart message. '''
@@ -196,7 +195,7 @@ class MultipartPart(object):
             return self.write_body(line, nl)
         return self.write_header(line, nl)
 
-    def add_header(self, line, nl):
+    def write_header(self, line, nl):
         line = line.decode(self.charset or 'latin9')
         if not nl: raise MultipartError('Unexpected end of line in header.')
         if not line.strip(): # blank line -> end of header segment
@@ -210,7 +209,7 @@ class MultipartPart(object):
             name, value = line.split(':', 1)
             self.headerlist.append((name.strip(), value.strip()))
 
-    def add_body(self, line, nl):
+    def write_body(self, line, nl):
         if not line and not nl: return # This does not even flush the buffer
         self.size += len(line) + len(self._buf)
         self.file.write(self._buf + line)
