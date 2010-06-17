@@ -374,10 +374,6 @@ def random_bytes(size):
     return b
 
 class TestMultipartParser(unittest.TestCase):
-    def setUp(self):
-        self.env = {'REQUEST_METHOD':'POST',
-                    'CONTENT_TYPE':'multipart/form-data; boundary=foo',
-                    'wsgi.input': io.BytesIO()}
 
     def test_line_parser(self):
         for line in ('foo',''):
@@ -500,4 +496,141 @@ class TestMultipartParser(unittest.TestCase):
             for field in forms:
                 self.assertEqual(rforms[field], forms[field])
 
+class TestFormParser(unittest.TestCase):
+    def setUp(self):
+        self.data = io.BytesIO()
+        self.env = {'REQUEST_METHOD':'POST',
+                    'CONTENT_TYPE':'multipart/form-data; boundary=foo',
+                    'wsgi.input': self.data}
+
+    def write(self, *lines):
+        for line in lines:
+            self.data.write(tob(line))
+    
+    def parse(self, *lines, **kwargs):
+        self.write(*lines)
+        self.data.seek(0)
+        kwargs['environ'] = self.env
+        kwargs['strict'] = True
+        return parse_form_data(**kwargs)
+    
+    def test_multipart(self):
+       forms, files = self.parse('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo\r\n',
+                   'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
+                   'abc\r\n', '--foo--')
+       self.assertEqual(forms['text1'], 'abc')
+       self.assertEqual(files['file1'].value, tob('abc'))
+       self.assertEqual(files['file1'].filename, 'random.png')
+       self.assertEqual(files['file1'].name, 'file1')
+       self.assertEqual(files['file1'].content_type, 'image/png')
+
+
+class TestBrokenMultipart(unittest.TestCase):
+    def setUp(self):
+        self.data = io.BytesIO()
+        self.env = {'REQUEST_METHOD':'POST',
+                    'CONTENT_TYPE':'multipart/form-data; boundary=foo',
+                    'wsgi.input': self.data}
+
+    def write(self, *lines):
+        for line in lines:
+            self.data.write(tob(line))
+
+    def parse(self, *lines, **kwargs):
+        self.write(*lines)
+        self.data.seek(0)
+        kwargs['environ'] = self.env
+        kwargs['strict'] = True
+        return parse_form_data(**kwargs)
+
+    def assertMPError(self, *a, **ka):
+        self.data.seek(0)
+        ka['environ'] = self.env
+        ka['strict'] = True
+        self.assertRaises(MultipartError, parse_form_data, **ka)
+        ka['strict'] = False
+        self.data.seek(0)
+        self.assertTrue(parse_form_data(**ka))
+
+    def test_big_boundary(self):
+        self.env['CONTENT_TYPE'] = 'multipart/form-data; boundary='+'foo'*1024
+        self.assertMPError(buffer_size=1024*3)
+
+    def test_wrong_method(self):
+        self.env['REQUEST_METHOD'] = 'GET'
+        self.assertMPError()
+
+    def test_missing_content_type(self):
+        del self.env['CONTENT_TYPE']
+        self.assertMPError()
+
+    def test_unsupported_content_type(self):
+        self.env['CONTENT_TYPE'] = 'multipart/fantasy'
+        self.assertMPError()
+
+    def test_missing_boundary(self):
+        self.env['CONTENT_TYPE'] = 'multipart/form-data'
+        self.assertMPError()
+
+    def test_no_terminator(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc')
+        self.assertMPError()
+
+    def test_no_newline_after_content(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc', '--foo--')
+        self.assertMPError()
+
+    def test_no_newline_after_middle_content(self):
+        forms, files = self.parse('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc', '--foo\r\n'
+                   'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
+        self.assertEqual(len(files), 1)
+        self.assertTrue(tob('name="file2"') in files['file1'].value)
+
+    def test_no_start_boundary(self):
+        self.write('--bar\r\n','--foo\r\n'
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_disk_limit(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError(memfile_limit=0, disk_limit=1024)
+
+    def test_mem_limit(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo\r\n',
+                   'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError(mem_limit=1024*3)
+
+    def test_invalid_header(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n',
+                   'Bad header\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_content_length_to_small(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n',
+                   'Content-Length: 111\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_no_disposition_header(self):
+        self.write('--foo\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError()
 
