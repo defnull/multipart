@@ -31,7 +31,7 @@ Licence (MIT)
 Features
 --------
 
-[ ] works in Python 2.5+ and 3.x (2to3).
+[x] works in Python 2.5+ and 3.x (2to3).
  [x] consumes bytes regardless of Python version.
 [x] parses multipart and url-encoded data.
  [ ] support for base46 and quoted-printable transfer encoding
