@@ -526,6 +526,13 @@ class TestFormParser(unittest.TestCase):
        self.assertEqual(files['file1'].name, 'file1')
        self.assertEqual(files['file1'].content_type, 'image/png')
 
+    def test_urlencoded(self):
+       for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
+           self.env['CONTENT_TYPE'] = ctype
+           forms, files = self.parse('a=b&c=d;e=f')
+           self.assertEqual(forms['a'], 'b')
+           self.assertEqual(forms['c'], 'd')
+           self.assertEqual(forms['e'], 'f')
 
 class TestBrokenMultipart(unittest.TestCase):
     def setUp(self):
@@ -633,4 +640,15 @@ class TestBrokenMultipart(unittest.TestCase):
         self.write('--foo\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
         self.assertMPError()
+
+    def test_big_urlencoded_detect_early(self):
+       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+       self.env['CONTENT_LENGTH'] = 1024+2
+       self.write('a='+'b'*1024)
+       self.assertMPError(mem_limit=1024)
+
+    def test_big_urlencoded_detect_late(self):
+       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+       self.write('a='+'b'*1024)
+       self.assertMPError(mem_limit=1024)
 
