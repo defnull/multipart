@@ -30,11 +30,13 @@ Todo
 ----
 
 * Support for base46 and quoted-printable transfer encoding.
+* Remove the bottle dependency.
 
 Licence (MIT)
 -------------
 
     Copyright (c) 2010, Marcel Hellkamp.
+    Inspired by the Werkzeug library: http://werkzeug.pocoo.org/
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal

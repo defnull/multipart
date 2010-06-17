@@ -312,6 +312,10 @@ class TestBrokenMultipart(unittest.TestCase):
        self.assertMPError(mem_limit=1024)
 
 
+''' The files used by the following test were taken from the werkzeug library
+    test suite and are therefore partly copyrighted by the Werkzeug Team
+    under BSD licence. See http://werkzeug.pocoo.org/ '''
+
 browser_test_cases = {}
 browser_test_cases['firefox3-2png1txt'] = {'data': base64.b64decode(tob('''
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xODY0NTQ2NTE3MTM1MTkzNDE5NTE1ODEwMzAx
