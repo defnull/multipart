@@ -419,14 +419,11 @@ class TestMultipartParser(unittest.TestCase):
         ''' If the size of an uploaded part exceeds memfile_limit,
             it is written to disk. '''
         test_file = tob('abc'*1024)
-        test_text = 'Test text\n with\r\n ümläuts!'
         boundary = '---------------------------186454651713519341951581030105'
         request = io.BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
-        'Content-Type: image/png', '', test_file, '--' + boundary,
-        'Content-Disposition: form-data; name="text"', '', test_text,
-        '--' + boundary + '--',''])))
+        'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
         request.seek(0)
         p = MultipartParser(request, boundary, memfile_limit=len(test_file))
         self.assertEqual(p.parts()[0].value, test_file)
@@ -435,6 +432,19 @@ class TestMultipartParser(unittest.TestCase):
         p = MultipartParser(request, boundary, memfile_limit=len(test_file)-1)
         self.assertEqual(p.parts()[0].value, test_file)
         self.assertFalse(p.parts()[0].is_buffered())
+
+    def test_file_seek(self):
+        ''' The file object should be readable withoud a seek(0). '''
+        test_file = tob('abc'*1024)
+        boundary = '---------------------------186454651713519341951581030105'
+        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
+        request.seek(0)
+        p = MultipartParser(request, boundary, memfile_limit=len(test_file))
+        self.assertEqual(p.get('file1').file.read(), test_file)
+        self.assertEqual(p.get('file1').value, test_file)
 
     def test_multiline_header(self):
         ''' HTTP allows headers to be multiline. '''

@@ -158,11 +158,13 @@ class MultipartParser(object):
         part = MultipartPart(**opts)
         for line, nl in lines:
             if line == terminator and not is_tail:
+                part.file.seek(0)
                 yield part
                 break
             elif line == separator and not is_tail:
-                if part.is_buffered(): mem_used += part.size
-                else: disk_used += part.size
+                if part.is_buffered(): mem_used  += part.size
+                else:                  disk_used += part.size
+                part.file.seek(0)
                 yield part
                 part = MultipartPart(**opts)
             else:
@@ -242,8 +244,11 @@ class MultipartPart(object):
     @property
     def value(self):
         if not self.file: return None
+        pos = self.file.tell()
         self.file.seek(0)
-        return self.file.read()
+        val = self.file.read()
+        self.file.seek(pos)
+        return val
     
     def save_as(self, path):
         self.file.seek(0)
