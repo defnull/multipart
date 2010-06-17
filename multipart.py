@@ -247,7 +247,6 @@ class MultipartPart(object):
 
     @property
     def value(self):
-        if not self.file: return None
         pos = self.file.tell()
         self.file.seek(0)
         val = self.file.read()
@@ -255,9 +254,11 @@ class MultipartPart(object):
         return val
     
     def save_as(self, path):
+        pos = self.file.tell()
         self.file.seek(0)
         with open(path, 'wb') as fp:
             size = copy_file(self.file, fp)
+        self.file.seek(pos)
         return size
 
 ##############################################################################
@@ -305,8 +306,12 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
             if content_length > mem_limit:
                 raise MultipartError("Request to big. Increase MAXMEM.")
             data = stream.read(mem_limit).decode(charset)
-            for key, value in urlparse.parse_qs(data, keep_blank_values=True):
-                forms[key] = value
+            if stream.read(1): # These is more that does not fit mem_limit
+                raise MultipartError("Request to big. Increase MAXMEM.")
+            data = urlparse.parse_qs(data, keep_blank_values=True)
+            for key, values in data.iteritems():
+                for value in values:
+                    forms[key] = value
         else:
             raise MultipartError("Unsupported content type.")
     except MultipartError:
