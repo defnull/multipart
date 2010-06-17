@@ -8,28 +8,28 @@ cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
 Features
 --------
 
-  * Python 2.5+ and 3.x (2to3) support. No dependencies.
-  * Parses multipart/form-data and application/x-url-encoded.
-  * Produces useful error messages in 'strict'-mode.
-  * Uploads of unknown size (missing Content-Length header).
-  * Fast memory mapped files (io.BytesIO) for small uploads.
-  * Temporary files on disk for big uploads.
-  * Memory and disk resource limits to prevent DOS attacks.
-  * 100% test coverage.
+* Python 2.5+ and 3.x (2to3) support. No dependencies.
+* Parses multipart/form-data and application/x-url-encoded.
+* Produces useful error messages in 'strict'-mode.
+* Uploads of unknown size (missing Content-Length header).
+* Fast memory mapped files (io.BytesIO) for small uploads.
+* Temporary files on disk for big uploads.
+* Memory and disk resource limits to prevent DOS attacks.
+* 100% test coverage.
 
 Compared to cgi.FieldStorage()
 ------------------------------
 
-  * Reads directly from a socket (no ``.readline(n)``, just ``.read(n)``).
-  * Consumes bytes regardless of Python version.
-  * Is desgined for WSGI, not CGI.
-  * Is not broken.
+* Reads directly from a socket (no ``.readline(n)``, just ``.read(n)``).
+* Consumes bytes regardless of Python version.
+* Is desgined for WSGI, not CGI.
+* Is not broken.
 
 
 Todo
 ----
 
-  * Support for base46 and quoted-printable transfer encoding.
+* Support for base46 and quoted-printable transfer encoding.
 
 Licence (MIT)
 -------------
