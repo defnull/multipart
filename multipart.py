@@ -202,7 +202,7 @@ class MultipartPart(object):
             self.finish_header()
         elif line[0] in ' \t' and self.headerlist:
             name, value = self.headerlist.pop()
-            self.headerlist.append(name, value+line.strip())
+            self.headerlist.append((name, value+line.strip()))
         else:
             if ':' not in line:
                 raise MultipartError("Syntax error in header: No colon.")
@@ -255,7 +255,7 @@ class MultipartPart(object):
 #################################### WSGI ####################################
 ##############################################################################
 
-def parse_form_data(environ, charset='utf8', strict=False):
+def parse_form_data(environ, charset='utf8', strict=False, **kw):
     ''' Parse form data from an environ dict and return two :class:`MultiDict`
         instances. The first contains form fields with unicode keys and values.
         The second contains file uploads with unicode keys and
@@ -283,7 +283,7 @@ def parse_form_data(environ, charset='utf8', strict=False):
             boundary = options.get('boundary','')
             if not boundary:
                 raise MultipartError("No boundary for multipart/form-data.")
-            for part in MultipartParser(stream, boundary, content_length):
+            for part in MultipartParser(stream, boundary, content_length, **kw):
                 codec = part.charset or charset
                 name = part.name.decode(codec) if part.name else None
                 if part.filename:
