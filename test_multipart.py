@@ -9,6 +9,7 @@ import base64
 #TODO: bufsize = len(boundary)+5 (edge case)
 #TODO: At least one test per possible exception (100% coverage)
 
+
 class TestHeaderParser(unittest.TestCase):
 
     def test_token_unquote(self):
@@ -27,6 +28,271 @@ class TestHeaderParser(unittest.TestCase):
         self.assertEqual(parse(head+'FileName="Test.txt"')[1]['filename'], 'Test.txt')
         self.assertEqual(parse(head+'filename="C:\\test\\bla.txt"')[1]['filename'], 'bla.txt')
         self.assertEqual(parse(head+'filename="\\\\test\\bla.txt"')[1]['filename'], 'bla.txt')
+
+
+class TestMultipartParser(unittest.TestCase):
+
+    def test_line_parser(self):
+        for line in ('foo',''):
+            for ending in ('\n','\r\n'):
+                i = MultipartParser(io.BytesIO(line+ending), 'foo')
+                i = i._lineiter().next()
+                self.assertEqual(i, (line, ending))
+
+    def test_iterlines(self):
+        data = 'abc\ndef\r\nghi'
+        result = [('abc','\n'),('def','\r\n'),('ghi','')]
+        i = MultipartParser(io.BytesIO(data), 'foo')._lineiter()
+        self.assertEqual(list(i), result)
+    
+    def test_iterlines_limit(self):
+        data, limit = 'abc\ndef\r\nghi', 10
+        result = [('abc','\n'),('def','\r\n'),('g','')]
+        i = MultipartParser(io.BytesIO(data), 'foo', limit)._lineiter()
+        self.assertEqual(list(i), result)
+        data, limit = 'abc\ndef\r\nghi', 8
+        result = [('abc','\n'),('def\r','')]
+        i = MultipartParser(io.BytesIO(data), 'foo', limit)._lineiter()
+        self.assertEqual(list(i), result)
+
+    def test_iterlines_maxbuf(self):
+        data, limit = ('X'*3*1024)+'x\n', 1024
+        result = [('X'*1024,''),('X'*1024,''),('X'*1024,''),('x','\n')]
+        i = MultipartParser(io.BytesIO(data), 'foo', buffer_size=limit)._lineiter()
+        self.assertEqual(list(i), result)
+
+    def test_copyfile(self):
+        source = io.BytesIO('abc')
+        target = io.BytesIO()
+        self.assertEqual(copy_file(source, target), 3)
+        target.seek(0)
+        self.assertEqual(target.read(), 'abc')
+
+    def test_big_file(self):
+        ''' If the size of an uploaded part exceeds memfile_limit,
+            it is written to disk. '''
+        test_file = tob('abc'*1024)
+        boundary = '---------------------------186454651713519341951581030105'
+        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', test_file, '--' + boundary,
+        'Content-Disposition: form-data; name="file2"; filename="random.png"',
+        'Content-Type: image/png', '', test_file + 'a', '--' + boundary,
+        'Content-Disposition: form-data; name="file3"; filename="random.png"',
+        'Content-Type: image/png', '', test_file*2, '--'+boundary+'--',''])))
+        p = MultipartParser(request, boundary, memfile_limit=len(test_file))
+        self.assertEqual(p.get('file1').value, test_file)
+        self.assertTrue(p.get('file1').is_buffered())
+        self.assertEqual(p.get('file2').value, test_file + 'a')
+        self.assertFalse(p.get('file2').is_buffered())
+        self.assertEqual(p.get('file3').value, test_file*2)
+        self.assertFalse(p.get('file3').is_buffered())
+
+    def test_get_all(self):
+        ''' Test the get() and get_all() methods. '''
+        boundary = '---------------------------186454651713519341951581030105'
+        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', 'abc'*1024, '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', 'def'*1024, '--' + boundary + '--',''])))
+        p = MultipartParser(request, boundary)
+        self.assertEqual(p.get('file1').value, tob('abc'*1024))
+        self.assertEqual(p.get('file2'), None)
+        self.assertEqual(len(p.get_all('file1')), 2)
+        self.assertEqual(p.get_all('file1')[1].value, tob('def'*1024))
+        self.assertEqual(p.get_all('file1'), p.parts())
+
+    def test_file_seek(self):
+        ''' The file object should be readable withoud a seek(0). '''
+        test_file = tob('abc'*1024)
+        boundary = '---------------------------186454651713519341951581030105'
+        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
+        p = MultipartParser(request, boundary)
+        self.assertEqual(p.get('file1').file.read(), test_file)
+        self.assertEqual(p.get('file1').value, test_file)
+
+    def test_multiline_header(self):
+        ''' HTTP allows headers to be multiline. '''
+        test_file = tob('abc'*1024)
+        test_text = 'Test text\n with\r\n ümläuts!'
+        boundary = '---------------------------186454651713519341951581030105'
+        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        '--' + boundary,
+        'Content-Disposition: form-data;',
+        '\tname="file1"; filename="random.png"',
+        'Content-Type: image/png', '', test_file, '--' + boundary,
+        'Content-Disposition: form-data;',
+        ' name="text"', '', test_text,
+        '--' + boundary + '--',''])))
+        p = MultipartParser(request, boundary)
+        self.assertEqual(p.get('file1').value, test_file)
+        self.assertEqual(p.get('file1').filename, 'random.png')
+        self.assertEqual(p.get('text').value, test_text)
+
+
+class TestFormParser(unittest.TestCase):
+    def setUp(self):
+        self.data = io.BytesIO()
+        self.env = {'REQUEST_METHOD':'POST',
+                    'CONTENT_TYPE':'multipart/form-data; boundary=foo',
+                    'wsgi.input': self.data}
+
+    def write(self, *lines):
+        for line in lines:
+            self.data.write(tob(line))
+    
+    def parse(self, *lines, **kwargs):
+        self.write(*lines)
+        self.data.seek(0)
+        kwargs['environ'] = self.env
+        kwargs['strict'] = True
+        return parse_form_data(**kwargs)
+    
+    def test_multipart(self):
+       forms, files = self.parse('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo\r\n',
+                   'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
+                   'abc\r\n', '--foo--')
+       self.assertEqual(forms['text1'], 'abc')
+       self.assertEqual(files['file1'].value, tob('abc'))
+       self.assertEqual(files['file1'].filename, 'random.png')
+       self.assertEqual(files['file1'].name, 'file1')
+       self.assertEqual(files['file1'].content_type, 'image/png')
+
+    def test_urlencoded(self):
+       for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
+           self.env['CONTENT_TYPE'] = ctype
+           forms, files = self.parse('a=b&c=d;e=f')
+           self.assertEqual(forms['a'], 'b')
+           self.assertEqual(forms['c'], 'd')
+           self.assertEqual(forms['e'], 'f')
+
+
+class TestBrokenMultipart(unittest.TestCase):
+    def setUp(self):
+        self.data = io.BytesIO()
+        self.env = {'REQUEST_METHOD':'POST',
+                    'CONTENT_TYPE':'multipart/form-data; boundary=foo',
+                    'wsgi.input': self.data}
+
+    def write(self, *lines):
+        for line in lines:
+            self.data.write(tob(line))
+
+    def parse(self, *lines, **kwargs):
+        self.write(*lines)
+        self.data.seek(0)
+        kwargs['environ'] = self.env
+        kwargs['strict'] = True
+        return parse_form_data(**kwargs)
+
+    def assertMPError(self, *a, **ka):
+        self.data.seek(0)
+        ka['environ'] = self.env
+        ka['strict'] = True
+        self.assertRaises(MultipartError, parse_form_data, **ka)
+        ka['strict'] = False
+        self.data.seek(0)
+        self.assertTrue(parse_form_data(**ka))
+
+    def test_big_boundary(self):
+        self.env['CONTENT_TYPE'] = 'multipart/form-data; boundary='+'foo'*1024
+        self.assertMPError(buffer_size=1024*3)
+
+    def test_wrong_method(self):
+        self.env['REQUEST_METHOD'] = 'GET'
+        self.assertMPError()
+
+    def test_missing_content_type(self):
+        del self.env['CONTENT_TYPE']
+        self.assertMPError()
+
+    def test_unsupported_content_type(self):
+        self.env['CONTENT_TYPE'] = 'multipart/fantasy'
+        self.assertMPError()
+
+    def test_missing_boundary(self):
+        self.env['CONTENT_TYPE'] = 'multipart/form-data'
+        self.assertMPError()
+
+    def test_no_terminator(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc')
+        self.assertMPError()
+
+    def test_no_newline_after_content(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc', '--foo--')
+        self.assertMPError()
+
+    def test_no_newline_after_middle_content(self):
+        forms, files = self.parse('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc', '--foo\r\n'
+                   'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
+        self.assertEqual(len(files), 1)
+        self.assertTrue(tob('name="file2"') in files['file1'].value)
+
+    def test_no_start_boundary(self):
+        self.write('--bar\r\n','--foo\r\n'
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_disk_limit(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError(memfile_limit=0, disk_limit=1024)
+
+    def test_mem_limit(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo\r\n',
+                   'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError(mem_limit=1024*3)
+
+    def test_invalid_header(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n',
+                   'Bad header\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_content_length_to_small(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n',
+                   'Content-Length: 111\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_no_disposition_header(self):
+        self.write('--foo\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_big_urlencoded_detect_early(self):
+       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+       self.env['CONTENT_LENGTH'] = 1024+2
+       self.write('a='+'b'*1024)
+       self.assertMPError(mem_limit=1024)
+
+    def test_big_urlencoded_detect_late(self):
+       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+       self.write('a='+'b'*1024)
+       self.assertMPError(mem_limit=1024)
+
 
 browser_test_cases = {}
 browser_test_cases['firefox3-2png1txt'] = {'data': base64.b64decode(tob('''
@@ -364,120 +630,7 @@ Z1FwaFe9j+d4eecaPd1dPxNTSlfWHm1v5y/EzBitblXp4JLZ5f6yBbOwaK5tsD+9c33jq/f8w2+m
 RSjOllPhkAAAAABJRU5ErkJggg==''')))},
 'forms': {'text': u'ie6 sucks :-/'}}
 
-def random_bytes(size):
-    import random
-    b = io.BytesIO()
-    i2b = bytes if bytes else chr
-    for i in xrange(size):
-        b.write(i2b(random.randrange(0, 256)))
-    b.seek(0)
-    return b
-
-class TestMultipartParser(unittest.TestCase):
-
-    def test_line_parser(self):
-        for line in ('foo',''):
-            for ending in ('\n','\r\n'):
-                i = MultipartParser(io.BytesIO(line+ending), 'foo')
-                i = i._lineiter().next()
-                self.assertEqual(i, (line, ending))
-
-    def test_iterlines(self):
-        data = 'abc\ndef\r\nghi'
-        result = [('abc','\n'),('def','\r\n'),('ghi','')]
-        i = MultipartParser(io.BytesIO(data), 'foo')._lineiter()
-        self.assertEqual(list(i), result)
-    
-    def test_iterlines_limit(self):
-        data, limit = 'abc\ndef\r\nghi', 10
-        result = [('abc','\n'),('def','\r\n'),('g','')]
-        i = MultipartParser(io.BytesIO(data), 'foo', limit)._lineiter()
-        self.assertEqual(list(i), result)
-        data, limit = 'abc\ndef\r\nghi', 8
-        result = [('abc','\n'),('def\r','')]
-        i = MultipartParser(io.BytesIO(data), 'foo', limit)._lineiter()
-        self.assertEqual(list(i), result)
-
-    def test_iterlines_maxbuf(self):
-        data, limit = ('X'*3*1024)+'x\n', 1024
-        result = [('X'*1024,''),('X'*1024,''),('X'*1024,''),('x','\n')]
-        i = MultipartParser(io.BytesIO(data), 'foo', buffer_size=limit)._lineiter()
-        self.assertEqual(list(i), result)
-
-    def test_copyfile(self):
-        source = io.BytesIO('abc')
-        target = io.BytesIO()
-        self.assertEqual(copy_file(source, target), 3)
-        target.seek(0)
-        self.assertEqual(target.read(), 'abc')
-
-    def test_big_file(self):
-        ''' If the size of an uploaded part exceeds memfile_limit,
-            it is written to disk. '''
-        test_file = tob('abc'*1024)
-        boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
-        '--' + boundary,
-        'Content-Disposition: form-data; name="file1"; filename="random.png"',
-        'Content-Type: image/png', '', test_file, '--' + boundary,
-        'Content-Disposition: form-data; name="file2"; filename="random.png"',
-        'Content-Type: image/png', '', test_file + 'a', '--' + boundary,
-        'Content-Disposition: form-data; name="file3"; filename="random.png"',
-        'Content-Type: image/png', '', test_file*2, '--'+boundary+'--',''])))
-        p = MultipartParser(request, boundary, memfile_limit=len(test_file))
-        self.assertEqual(p.get('file1').value, test_file)
-        self.assertTrue(p.get('file1').is_buffered())
-        self.assertEqual(p.get('file2').value, test_file + 'a')
-        self.assertFalse(p.get('file2').is_buffered())
-        self.assertEqual(p.get('file3').value, test_file*2)
-        self.assertFalse(p.get('file3').is_buffered())
-
-    def test_get_all(self):
-        ''' Test the get() and get_all() methods. '''
-        boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
-        '--' + boundary,
-        'Content-Disposition: form-data; name="file1"; filename="random.png"',
-        'Content-Type: image/png', '', 'abc'*1024, '--' + boundary,
-        'Content-Disposition: form-data; name="file1"; filename="random.png"',
-        'Content-Type: image/png', '', 'def'*1024, '--' + boundary + '--',''])))
-        p = MultipartParser(request, boundary)
-        self.assertEqual(p.get('file1').value, tob('abc'*1024))
-        self.assertEqual(p.get('file2'), None)
-        self.assertEqual(len(p.get_all('file1')), 2)
-        self.assertEqual(p.get_all('file1')[1].value, tob('def'*1024))
-        self.assertEqual(p.get_all('file1'), p.parts())
-
-    def test_file_seek(self):
-        ''' The file object should be readable withoud a seek(0). '''
-        test_file = tob('abc'*1024)
-        boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
-        '--' + boundary,
-        'Content-Disposition: form-data; name="file1"; filename="random.png"',
-        'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
-        p = MultipartParser(request, boundary)
-        self.assertEqual(p.get('file1').file.read(), test_file)
-        self.assertEqual(p.get('file1').value, test_file)
-
-    def test_multiline_header(self):
-        ''' HTTP allows headers to be multiline. '''
-        test_file = tob('abc'*1024)
-        test_text = 'Test text\n with\r\n ümläuts!'
-        boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
-        '--' + boundary,
-        'Content-Disposition: form-data;',
-        '\tname="file1"; filename="random.png"',
-        'Content-Type: image/png', '', test_file, '--' + boundary,
-        'Content-Disposition: form-data;',
-        ' name="text"', '', test_text,
-        '--' + boundary + '--',''])))
-        p = MultipartParser(request, boundary)
-        self.assertEqual(p.get('file1').value, test_file)
-        self.assertEqual(p.get('file1').filename, 'random.png')
-        self.assertEqual(p.get('text').value, test_text)
-
+class TestWerkzeugExamples(unittest.TestCase):
     def test_werkzeug_examples(self):
         """Tests multipart parsing against data collected from webbrowsers"""
         for name in browser_test_cases:
@@ -495,160 +648,3 @@ class TestMultipartParser(unittest.TestCase):
                 self.assertEqual(rfiles[field].value, files[field][2])
             for field in forms:
                 self.assertEqual(rforms[field], forms[field])
-
-class TestFormParser(unittest.TestCase):
-    def setUp(self):
-        self.data = io.BytesIO()
-        self.env = {'REQUEST_METHOD':'POST',
-                    'CONTENT_TYPE':'multipart/form-data; boundary=foo',
-                    'wsgi.input': self.data}
-
-    def write(self, *lines):
-        for line in lines:
-            self.data.write(tob(line))
-    
-    def parse(self, *lines, **kwargs):
-        self.write(*lines)
-        self.data.seek(0)
-        kwargs['environ'] = self.env
-        kwargs['strict'] = True
-        return parse_form_data(**kwargs)
-    
-    def test_multipart(self):
-       forms, files = self.parse('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo\r\n',
-                   'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
-                   'abc\r\n', '--foo--')
-       self.assertEqual(forms['text1'], 'abc')
-       self.assertEqual(files['file1'].value, tob('abc'))
-       self.assertEqual(files['file1'].filename, 'random.png')
-       self.assertEqual(files['file1'].name, 'file1')
-       self.assertEqual(files['file1'].content_type, 'image/png')
-
-    def test_urlencoded(self):
-       for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
-           self.env['CONTENT_TYPE'] = ctype
-           forms, files = self.parse('a=b&c=d;e=f')
-           self.assertEqual(forms['a'], 'b')
-           self.assertEqual(forms['c'], 'd')
-           self.assertEqual(forms['e'], 'f')
-
-class TestBrokenMultipart(unittest.TestCase):
-    def setUp(self):
-        self.data = io.BytesIO()
-        self.env = {'REQUEST_METHOD':'POST',
-                    'CONTENT_TYPE':'multipart/form-data; boundary=foo',
-                    'wsgi.input': self.data}
-
-    def write(self, *lines):
-        for line in lines:
-            self.data.write(tob(line))
-
-    def parse(self, *lines, **kwargs):
-        self.write(*lines)
-        self.data.seek(0)
-        kwargs['environ'] = self.env
-        kwargs['strict'] = True
-        return parse_form_data(**kwargs)
-
-    def assertMPError(self, *a, **ka):
-        self.data.seek(0)
-        ka['environ'] = self.env
-        ka['strict'] = True
-        self.assertRaises(MultipartError, parse_form_data, **ka)
-        ka['strict'] = False
-        self.data.seek(0)
-        self.assertTrue(parse_form_data(**ka))
-
-    def test_big_boundary(self):
-        self.env['CONTENT_TYPE'] = 'multipart/form-data; boundary='+'foo'*1024
-        self.assertMPError(buffer_size=1024*3)
-
-    def test_wrong_method(self):
-        self.env['REQUEST_METHOD'] = 'GET'
-        self.assertMPError()
-
-    def test_missing_content_type(self):
-        del self.env['CONTENT_TYPE']
-        self.assertMPError()
-
-    def test_unsupported_content_type(self):
-        self.env['CONTENT_TYPE'] = 'multipart/fantasy'
-        self.assertMPError()
-
-    def test_missing_boundary(self):
-        self.env['CONTENT_TYPE'] = 'multipart/form-data'
-        self.assertMPError()
-
-    def test_no_terminator(self):
-        self.write('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc')
-        self.assertMPError()
-
-    def test_no_newline_after_content(self):
-        self.write('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc', '--foo--')
-        self.assertMPError()
-
-    def test_no_newline_after_middle_content(self):
-        forms, files = self.parse('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc', '--foo\r\n'
-                   'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
-        self.assertEqual(len(files), 1)
-        self.assertTrue(tob('name="file2"') in files['file1'].value)
-
-    def test_no_start_boundary(self):
-        self.write('--bar\r\n','--foo\r\n'
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
-        self.assertMPError()
-
-    def test_disk_limit(self):
-        self.write('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
-        self.assertMPError(memfile_limit=0, disk_limit=1024)
-
-    def test_mem_limit(self):
-        self.write('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo\r\n',
-                   'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
-        self.assertMPError(mem_limit=1024*3)
-
-    def test_invalid_header(self):
-        self.write('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n',
-                   'Bad header\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
-        self.assertMPError()
-
-    def test_content_length_to_small(self):
-        self.write('--foo\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n',
-                   'Content-Length: 111\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
-        self.assertMPError()
-
-    def test_no_disposition_header(self):
-        self.write('--foo\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
-        self.assertMPError()
-
-    def test_big_urlencoded_detect_early(self):
-       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
-       self.env['CONTENT_LENGTH'] = 1024+2
-       self.write('a='+'b'*1024)
-       self.assertMPError(mem_limit=1024)
-
-    def test_big_urlencoded_detect_late(self):
-       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
-       self.write('a='+'b'*1024)
-       self.assertMPError(mem_limit=1024)
-
