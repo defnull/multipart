@@ -301,9 +301,10 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
                     forms[name] = part.value.decode(codec)
         elif content_type in ('application/x-www-form-urlencoded',
                               'application/x-url-encoded'):
-            if content_length > MultipartParser.mem_limit:
+            mem_limit = kw.get('mem_limit', 2**20)
+            if content_length > mem_limit:
                 raise MultipartError("Request to big. Increase MAXMEM.")
-            data = stream.read(MultipartParser.mem_limit).decode(charset)
+            data = stream.read(mem_limit).decode(charset)
             for key, value in urlparse.parse_qs(data, keep_blank_values=True):
                 forms[key] = value
         else:
