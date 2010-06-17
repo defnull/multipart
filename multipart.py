@@ -179,7 +179,7 @@ class MultipartParser(object):
 
 class MultipartPart(object):
     
-    def __init__(self, buffer_size=2**16, memfile_limit=2**19):
+    def __init__(self, buffer_size=2**16, memfile_limit=2**18):
         self.headerlist = []
         self.headers = Headers(self.headerlist)
         self.file = False
@@ -219,7 +219,7 @@ class MultipartPart(object):
         if self.size > self.memfile_limit and isinstance(self.file, io.BytesIO):
             self.file, old = TemporaryFile(mode='w+b'), self.file
             old.seek(0)
-            file_copy(old, self.file, self.size, self.buffer_size)
+            copy_file(old, self.file, self.size, self.buffer_size)
 
     def finish_header(self):
         self.file = io.BytesIO()
