@@ -117,12 +117,16 @@ class MultipartParser(object):
         return list(iter(self))
     
     def get(self, name, default=None):
-        ''' Return the first part with that name. '''
+        ''' Return the first part with that name or a default value (None). '''
         for part in self:
             if name == part.name:
                 return part
         return default
-    
+
+    def get_all(self, name):
+        ''' Return a list of parts with that name. '''
+        return [p for p in self if p.name == name]
+
     def _lineiter(self):
         ''' Iterate over a binary file-like object line by line. Each line is
             returned as a (line, line_ending) tuple. If the line does not fit

@@ -424,7 +424,6 @@ class TestMultipartParser(unittest.TestCase):
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
-        request.seek(0)
         p = MultipartParser(request, boundary, memfile_limit=len(test_file))
         self.assertEqual(p.parts()[0].value, test_file)
         self.assertTrue(p.parts()[0].is_buffered())
@@ -432,6 +431,21 @@ class TestMultipartParser(unittest.TestCase):
         p = MultipartParser(request, boundary, memfile_limit=len(test_file)-1)
         self.assertEqual(p.parts()[0].value, test_file)
         self.assertFalse(p.parts()[0].is_buffered())
+
+    def test_get_all(self):
+        ''' Test the get() and get_all() methods. '''
+        boundary = '---------------------------186454651713519341951581030105'
+        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', 'abc'*1024, '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', 'def'*1024, '--' + boundary + '--',''])))
+        p = MultipartParser(request, boundary)
+        self.assertEqual(p.get('file1').value, tob('abc'*1024))
+        self.assertEqual(p.get('file2'), None)
+        self.assertEqual(len(p.get_all('file1')), 2)
+        self.assertEqual(p.get_all('file1')[1].value, tob('def'*1024))
 
     def test_file_seek(self):
         ''' The file object should be readable withoud a seek(0). '''
@@ -441,8 +455,7 @@ class TestMultipartParser(unittest.TestCase):
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
-        request.seek(0)
-        p = MultipartParser(request, boundary, memfile_limit=len(test_file))
+        p = MultipartParser(request, boundary)
         self.assertEqual(p.get('file1').file.read(), test_file)
         self.assertEqual(p.get('file1').value, test_file)
 
@@ -459,8 +472,7 @@ class TestMultipartParser(unittest.TestCase):
         'Content-Disposition: form-data;',
         ' name="text"', '', test_text,
         '--' + boundary + '--',''])))
-        request.seek(0)
-        p = MultipartParser(request, boundary, memfile_limit=len(test_file))
+        p = MultipartParser(request, boundary)
         self.assertEqual(p.get('file1').value, test_file)
         self.assertEqual(p.get('file1').filename, 'random.png')
         self.assertEqual(p.get('text').value, test_text)
