@@ -105,11 +105,6 @@ class MultipartParser(object):
     
     def __iter__(self):
         ''' Iterate over the parts of the multipart message. '''
-        return self.parts
-    
-    @property
-    def parts(self):
-        ''' An iterator over the parts of the multipart message. '''
         if not self._part_iter:
             self._part_iter = self._iterparse()
         for part in self._done:
@@ -117,6 +112,17 @@ class MultipartParser(object):
         for part in self._part_iter:
             self._done.append(part)
             yield part
+    
+    def parts(self):
+        ''' Returns a list with all parts of the multipart message. '''
+        return list(iter(self))
+    
+    def get(self, name, default=None):
+        ''' Return the first part with that name. '''
+        for part in self:
+            if name == part.name:
+                return part
+        return default
     
     def _lineiter(self):
         ''' Iterate over a binary file-like object line by line. Each line is
