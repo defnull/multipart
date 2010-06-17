@@ -1,28 +1,55 @@
 # -*- coding: utf-8 -*-
+
+'''
+This module provides a parser for the multipart/form-data format. It can read
+from a file, a socket or an WSGI environment. The parser can be used to replace
+cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
+
+Licence (MIT)
+-------------
+
+    Copyright (c) 2010, Marcel Hellkamp.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    THE SOFTWARE.
+
+Features
+--------
+
+[ ] works in Python 2.5+ and 3.x (2to3).
+ [x] consumes bytes regardless of Python version.
+[x] parses multipart and url-encoded data.
+ [ ] support for base46 and quoted-printable transfer encoding
+[x] produces useful error messages.
+ [x] supports uploads of unknown size (missing content-length header).
+[x] supports memory and disk resource limits to prevent DOS attacks.
+ [x] uses fast memory mapped files (io.BytesIO) for small uploads.
+ [x] uses temporary files for big uploads.
+[x] has no dependencies.
+[x] has 100% test coverage.
+
+'''
+
 from tempfile import TemporaryFile
 from wsgiref.headers import Headers
 import re, sys, io
 import urlparse
-sys.path.insert(0,'/home/marc/coding/bottle/')
 from bottle import MultiDict
-'''
-TODO
-
-[ ] works in Python 2.5+ and 3.x (2to3).
-[ ] consumes bytes regardless of python version.
-[x] has no dependencies.
-[x] passes all the tests in werkzeug/test/test_formparser.py.
-[x] produces useful error messages.
-[x] supports uploads of unknown size (missing content-length header).
-[x] uses fast memory mapped file-likes (io.BytesIO) for small uploads.
-[x] uses tempfiles for big uploads.
-[x] has an upper memory limit to prevent DOS attacks.
-[x] has an upper disk size limit to prevent DOS attacks.
-[x] supports multipart and url-encoded data.
-[ ] supports base46 and quoted-printable encoding
-[x] uses stream.read() only (no stream.readline(size)) and therefor works directly on wsgi.input.
-[x] works directly on an environ dict and does not require the features of the request object.
-'''
 ##############################################################################
 ################################ Header Parser ################################
 ##############################################################################
@@ -83,7 +110,7 @@ class MultipartParser(object):
     
     def __init__(self, stream, boundary, content_length=-1,
                  disk_limit=2**30, mem_limit=2**20, memfile_limit=2**18,
-                 buffer_size=2**16):
+                 buffer_size=2**16, charset='latin9'):
         ''' Parse a multipart/form-data byte stream. This object is an iterator
             over the parts of the message.
             
@@ -97,6 +124,7 @@ class MultipartParser(object):
         self.memfile_limit = memfile_limit
         self.mem_limit = min(mem_limit, self.disk_limit)
         self.buffer_size = min(buffer_size, self.mem_limit)
+        self.charset = charset
         if self.buffer_size - 5 < len(boundary): # "--boundary--\n"
             raise MultipartError('Boundary does not fit into buffer_size.')
         self._done = []
@@ -135,20 +163,22 @@ class MultipartParser(object):
         '''
         read = self.stream.read
         maxread, maxbuf = self.content_length, self.buffer_size
+        _bnl = tob('\r\n')
         while 1:
             lines = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
             maxread -= len(lines)
             if not lines: break
             for line in lines.splitlines(True):
-                if line[-2:] == '\r\n': yield line[:-2], '\r\n'
-                elif line[-1:] == '\n': yield line[:-1], '\n'
+                if line[-2:] == _bnl: yield line[:-2], _bnl
+                elif line[-1:] == _bnl[-1:]: yield line[:-1], _bnl[-1:]
                 # elif line[-1:] == '\r': yield line[:-1], '\r'
                 # Not supported. maxbuf could cut between \r and \n
-                else:                   yield line, ''
-     
+                else:                   yield line, _bnl[:0] # b'rn'[:0] -> b''
+    
     def _iterparse(self):
         lines, line = self._lineiter(), ''
-        separator, terminator = '--'+self.boundary, '--'+self.boundary+'--'
+        separator = tob('--') + tob(self.boundary)
+        terminator = tob('--') + tob(self.boundary) + tob('--')
         # Consume first boundary. Ignore leading blank lines
         for line, nl in lines:
             if line: break
@@ -158,7 +188,8 @@ class MultipartParser(object):
         mem_used, disk_used = 0, 0 # Track used resources to prevent DoS
         is_tail = False # True if the last line was incomplete (cutted)
         opts = {'buffer_size': self.buffer_size,
-                'memfile_limit': self.memfile_limit}
+                'memfile_limit': self.memfile_limit,
+                'charset': self.charset}
         part = MultipartPart(**opts)
         for line, nl in lines:
             if line == terminator and not is_tail:
@@ -185,14 +216,14 @@ class MultipartParser(object):
 
 class MultipartPart(object):
     
-    def __init__(self, buffer_size=2**16, memfile_limit=2**18):
+    def __init__(self, buffer_size=2**16, memfile_limit=2**18, charset='latin9'):
         self.headerlist = []
-        self.headers = Headers(self.headerlist)
+        self.headers = None
         self.file = False
         self.size = 0
-        self._buf = ''
+        self._buf = tob('')
         self.disposition, self.name, self.filename = None, None, None
-        self.content_type, self.charset = None, None
+        self.content_type, self.charset = None, charset
         self.memfile_limit = memfile_limit
         self.buffer_size = buffer_size
 
@@ -223,12 +254,14 @@ class MultipartPart(object):
         if self.content_length > 0 and self.size > self.content_length:
             raise MultipartError('Size of body exceeds Content-Length header.')
         if self.size > self.memfile_limit and isinstance(self.file, io.BytesIO):
+            # TODO: What about non-file uploads that exceed the memfile_limit?
             self.file, old = TemporaryFile(mode='w+b'), self.file
             old.seek(0)
             copy_file(old, self.file, self.size, self.buffer_size)
 
     def finish_header(self):
         self.file = io.BytesIO()
+        self.headers = Headers(self.headerlist)
         cdis = self.headers.get('Content-Disposition','')
         ctype = self.headers.get('Content-Type','')
         clen = self.headers.get('Content-Length','-1')
@@ -238,7 +271,7 @@ class MultipartPart(object):
         self.name = self.options.get('name')
         self.filename = self.options.get('filename')
         self.content_type, options = parse_options_header(ctype)
-        self.charset = options.get('charset')
+        self.charset = options.get('charset') or self.charset
         self.content_length = int(self.headers.get('Content-Length','-1'))
 
     def is_buffered(self):
@@ -247,11 +280,12 @@ class MultipartPart(object):
 
     @property
     def value(self):
+        ''' Data decoded with the specified charset '''
         pos = self.file.tell()
         self.file.seek(0)
         val = self.file.read()
         self.file.seek(pos)
-        return val
+        return val.decode(self.charset)
     
     def save_as(self, path):
         pos = self.file.tell()
@@ -288,18 +322,16 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
             raise MultipartError("Missing Content-Type header.")
         content_type, options = parse_options_header(content_type)
         stream = environ.get('wsgi.input') or io.BytesIO()
-        charset = options.get('charset', charset) # Honor a verbose browser
+        kw['charset'] = charset = options.get('charset', charset)
         if content_type == 'multipart/form-data':
             boundary = options.get('boundary','')
             if not boundary:
                 raise MultipartError("No boundary for multipart/form-data.")
             for part in MultipartParser(stream, boundary, content_length, **kw):
-                codec = part.charset or charset
-                name = part.name.decode(codec) if part.name else None
                 if part.filename:
-                    files[name] = part
-                elif part.is_buffered():
-                    forms[name] = part.value.decode(codec)
+                    files[part.name] = part
+                elif part.is_buffered(): # TODO: What about big forms?
+                    forms[part.name] = part.value
         elif content_type in ('application/x-www-form-urlencoded',
                               'application/x-url-encoded'):
             mem_limit = kw.get('mem_limit', 2**20)
