@@ -423,14 +423,18 @@ class TestMultipartParser(unittest.TestCase):
         request = io.BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
-        'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
+        'Content-Type: image/png', '', test_file, '--' + boundary,
+        'Content-Disposition: form-data; name="file2"; filename="random.png"',
+        'Content-Type: image/png', '', test_file + 'a', '--' + boundary,
+        'Content-Disposition: form-data; name="file3"; filename="random.png"',
+        'Content-Type: image/png', '', test_file*2, '--'+boundary+'--',''])))
         p = MultipartParser(request, boundary, memfile_limit=len(test_file))
-        self.assertEqual(p.parts()[0].value, test_file)
-        self.assertTrue(p.parts()[0].is_buffered())
-        request.seek(0)
-        p = MultipartParser(request, boundary, memfile_limit=len(test_file)-1)
-        self.assertEqual(p.parts()[0].value, test_file)
-        self.assertFalse(p.parts()[0].is_buffered())
+        self.assertEqual(p.get('file1').value, test_file)
+        self.assertTrue(p.get('file1').is_buffered())
+        self.assertEqual(p.get('file2').value, test_file + 'a')
+        self.assertFalse(p.get('file2').is_buffered())
+        self.assertEqual(p.get('file3').value, test_file*2)
+        self.assertFalse(p.get('file3').is_buffered())
 
     def test_get_all(self):
         ''' Test the get() and get_all() methods. '''
@@ -446,6 +450,7 @@ class TestMultipartParser(unittest.TestCase):
         self.assertEqual(p.get('file2'), None)
         self.assertEqual(len(p.get_all('file1')), 2)
         self.assertEqual(p.get_all('file1')[1].value, tob('def'*1024))
+        self.assertEqual(p.get_all('file1'), p.parts())
 
     def test_file_seek(self):
         ''' The file object should be readable withoud a seek(0). '''
