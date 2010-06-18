@@ -37,7 +37,60 @@ from tempfile import TemporaryFile
 from wsgiref.headers import Headers
 import re, sys, io
 import urlparse
-from bottle import MultiDict
+
+##############################################################################
+################################ Helper & Misc ################################
+##############################################################################
+# Some of these were copied from bottle: http://bottle.paws.de/
+
+try:
+    from collections import MutableMapping as DictMixin
+except ImportError: # pragma: no cover
+    from UserDict import DictMixin
+
+class MultiDict(DictMixin):
+    """ A dict that remembers old values for each key """
+    # collections.MutableMapping would be better for Python >= 2.6
+    def __init__(self, *a, **k):
+        self.dict = dict()
+        for k, v in dict(*a, **k).iteritems():
+            self[k] = v
+
+    def __len__(self): return len(self.dict)
+    def __iter__(self): return iter(self.dict)
+    def __contains__(self, key): return key in self.dict
+    def __delitem__(self, key): del self.dict[key]
+    def keys(self): return self.dict.keys()
+    def __getitem__(self, key): return self.get(key, KeyError, -1)
+    def __setitem__(self, key, value): self.append(key, value)
+
+    def append(self, key, value): self.dict.setdefault(key, []).append(value)
+    def replace(self, key, value): self.dict[key] = [value]
+    def getall(self, key): return self.dict.get(key) or []
+
+    def get(self, key, default=None, index=-1):
+        if key not in self.dict and default != KeyError:
+            return [default][index]
+        return self.dict[key][index]
+
+    def iterallitems(self):
+        for key, values in self.dict.iteritems():
+            for value in values:
+                yield key, value
+
+def tob(data, enc='utf8'): # Convert strings to bytes (py2 and py3)
+    return data.encode(enc) if isinstance(data, unicode) else data
+
+def copy_file(stream, target, maxread=-1, buffer_size=2*16):
+    ''' Read from :stream and write to :target until :maxread or EOF. '''
+    size, read = 0, stream.read
+    while 1:
+        to_read = buffer_size if maxread < 0 else min(buffer_size, maxread-size)
+        part = read(to_read)
+        if not part: return size
+        target.write(part)
+        size += len(part)
+
 ##############################################################################
 ################################ Header Parser ################################
 ##############################################################################
@@ -76,19 +129,6 @@ def parse_options_header(header, options=None):
 ##############################################################################
 ################################## Multipart ##################################
 ##############################################################################
-
-def tob(data, enc='utf8'): # Convert strings to bytes (py2 and py3)
-    return data.encode(enc) if isinstance(data, unicode) else data
-
-def copy_file(stream, target, maxread=-1, buffer_size=2*16):
-    ''' Read from :stream and write to :target until :maxread or EOF. '''
-    size, read = 0, stream.read
-    while 1:
-        to_read = buffer_size if maxread < 0 else min(buffer_size, maxread-size)
-        part = read(to_read)
-        if not part: return size
-        target.write(part)
-        size += len(part)
 
 
 class MultipartError(ValueError): pass
@@ -288,16 +328,18 @@ class MultipartPart(object):
 ##############################################################################
 
 def parse_form_data(environ, charset='utf8', strict=False, **kw):
-    ''' Parse form data from an environ dict and return two :class:`MultiDict`
-        instances. The first contains form fields with unicode keys and values.
-        The second contains file uploads with unicode keys and
-        :class:`MultipartPart` instances as values. Catch
-        :exc:`ValueError` and :exc:`IndexError` to be sure.
+    ''' Parse form data from an environ dict and return a (forms, files) tuple.
+        Both tuple values are dictionaries with the form-field name as a key
+        (unicode) and lists as values (multiple values per key are possible).
+        The forms-dictionary contains form-field values as unicode strings.
+        The files-dictionary contains :class:`MultipartPart` instances, either
+        because the form-field was a file-upload or the value is to big to fit
+        into memory limits.
         
         :param environ: An WSGI environment dict.
         :param charset: The charset to use if unsure. (default: utf8)
-        :param strict: If True, raise :exc:`MultipartError` on parsing errors.
-                       These are silently ignored by default.
+        :param strict: If True, raise :exc:`MultipartError` on any parsing
+                       errors. These are silently ignored by default.
     '''
         
     forms, files = MultiDict(), MultiDict()
@@ -316,9 +358,9 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
             if not boundary:
                 raise MultipartError("No boundary for multipart/form-data.")
             for part in MultipartParser(stream, boundary, content_length, **kw):
-                if part.filename:
+                if part.filename or not part.is_buffered():
                     files[part.name] = part
-                elif part.is_buffered(): # TODO: What about big forms?
+                else: # TODO: Big form-fields are in the files dict. really?
                     forms[part.name] = part.value
         elif content_type in ('application/x-www-form-urlencoded',
                               'application/x-url-encoded'):

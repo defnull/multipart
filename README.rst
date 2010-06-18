@@ -30,7 +30,6 @@ Todo
 ----
 
 * Support for base46 and quoted-printable transfer encoding.
-* Remove the bottle dependency.
 
 Licence (MIT)
 -------------
