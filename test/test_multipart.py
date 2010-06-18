@@ -31,7 +31,7 @@ class TestHeaderParser(unittest.TestCase):
         self.assertEqual(parse(head+'filename="Test.txt"')[0], 'form-data')
         self.assertEqual(parse(head+'filename="Test.txt"')[1]['name'], 'Test')
         self.assertEqual(parse(head+'filename="Test.txt"')[1]['filename'], 'Test.txt')
-        self.assertEqual(parse(head+'FileName="Test.txt"')[1]['filename'], 'Test.txt')
+        self.assertEqual(parse(head+'FileName="Te\\"st.txt"')[1]['filename'], 'Te"st.txt')
         self.assertEqual(parse(head+'filename="C:\\test\\bla.txt"')[1]['filename'], 'bla.txt')
         self.assertEqual(parse(head+'filename="\\\\test\\bla.txt"')[1]['filename'], 'bla.txt')
 
