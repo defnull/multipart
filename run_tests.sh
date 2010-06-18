@@ -1,7 +1,6 @@
 rm -r ./test.run &>/dev/null
 cp -r ./test ./test.run
 cp ./src/* ./test.run/
-wget -O "./test.run/bottle.py" "http://github.com/defnull/bottle/raw/master/bottle.py"
 cd test.run
 
 coverage run ./test.py
