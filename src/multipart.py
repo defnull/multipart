@@ -121,7 +121,7 @@ def parse_options_header(header, options=None):
     ctype, tail = header.split(';', 1)
     options = options or {}
     for match in _re_option.finditer(tail):
-        key = header_unquote(match.group(1)).lower().strip()
+        key = match.group(1).lower()
         value = header_unquote(match.group(2), key=='filename')
         options[key] = value
     return ctype, options
