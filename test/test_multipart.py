@@ -20,6 +20,11 @@ class TestHeaderParser(unittest.TestCase):
         self.assertEqual('ie.exe', unquote('"\\\\network\\ie.exe"', True))
         self.assertEqual('ie.exe', unquote('"c:\\wondows\\ie.exe"', True))
 
+    def test_token_quote(self):
+        quote = mp.header_quote
+        self.assertEqual(quote('foo'), 'foo')
+        self.assertEqual(quote('foo"bar'), '"foo\\"bar"')
+
     def test_options_parser(self):
         parse = mp.parse_options_header
         head = 'form-data; name="Test"; '

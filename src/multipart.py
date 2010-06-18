@@ -103,7 +103,7 @@ _option = '(?:;|^)\s*([^%s]+)\s*=\s*(%s)' % (_special, _value)
 _re_option = re.compile(_option) # key=value part of an Content-Type like header
 
 def header_quote(val):
-    if not _re_special.match(val):
+    if not _re_special.search(val):
         return val
     return '"' + val.replace('\\','\\\\').replace('"','\\"') + '"'
 
