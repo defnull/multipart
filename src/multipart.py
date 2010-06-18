@@ -95,7 +95,7 @@ def copy_file(stream, target, maxread=-1, buffer_size=2*16):
 ################################ Header Parser ################################
 ##############################################################################
 
-_special = re.escape('()<>@,;:\\"/[]?={} \t\n\r')
+_special = re.escape('()<>@,;:\\"/[]?={} \t')
 _re_special = re.compile('[%s]' % _special)
 _qstr = '"(?:\\\\.|[^"])*"' # Quoted string
 _value = '(?:[^%s]+|%s)' % (_special, _qstr) # Save or quoted string
