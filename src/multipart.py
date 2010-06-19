@@ -50,7 +50,6 @@ except ImportError: # pragma: no cover
 
 class MultiDict(DictMixin):
     """ A dict that remembers old values for each key """
-    # collections.MutableMapping would be better for Python >= 2.6
     def __init__(self, *a, **k):
         self.dict = dict()
         for k, v in dict(*a, **k).iteritems():
