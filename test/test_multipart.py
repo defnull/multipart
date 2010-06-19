@@ -62,8 +62,8 @@ class TestMultipartParser(unittest.TestCase):
         self.assertEqual(list(i), result)
 
     def test_iterlines_maxbuf(self):
-        data, limit = 'abcdefg\nhijklmn\r\no', 8
-        result = [(tob('abcdefg'),tob('\n')),(tob('hijklmn'),tob('')),(tob(''),tob('\r\n')),(tob('o'),tob(''))]
+        data, limit = 'abcdefgh\nijklmnop\r\nq', 9
+        result = [(tob('abcdefgh'),tob('\n')),(tob('ijklmnop'),tob('')),(tob(''),tob('\r\n')),(tob('q'),tob(''))]
         i = mp.MultipartParser(io.BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
         self.assertEqual(list(i), result)
         data, limit = ('X'*3*1024)+'x\n', 1024

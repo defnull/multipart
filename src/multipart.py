@@ -152,7 +152,7 @@ class MultipartParser(object):
         self.mem_limit = min(mem_limit, self.disk_limit)
         self.buffer_size = min(buffer_size, self.mem_limit)
         self.charset = charset
-        if self.buffer_size - 5 < len(boundary): # "--boundary--\n"
+        if self.buffer_size - 6 < len(boundary): # "--boundary--\r\n"
             raise MultipartError('Boundary does not fit into buffer_size.')
         self._done = []
         self._part_iter = None
