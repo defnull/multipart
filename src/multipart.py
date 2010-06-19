@@ -191,17 +191,36 @@ class MultipartParser(object):
         '''
         read = self.stream.read
         maxread, maxbuf = self.content_length, self.buffer_size
-        _bnl = tob('\r\n')
+        _bcrnl = tob('\r\n')
+        _bcr = _bcrnl[:1]
+        _bnl = _bcrnl[1:]
+        _bempty = _bcrnl[:0] # b'rn'[:0] -> b''
+        buffer = _bempty # buffer for the last (partial) line
         while 1:
-            lines = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
-            maxread -= len(lines)
-            if not lines: break
-            for line in lines.splitlines(True):
-                if line[-2:] == _bnl: yield line[:-2], _bnl
-                elif line[-1:] == _bnl[-1:]: yield line[:-1], _bnl[-1:]
-                # elif line[-1:] == '\r': yield line[:-1], '\r'
-                # Not supported. maxbuf could cut between \r and \n
-                else:                   yield line, _bnl[:0] # b'rn'[:0] -> b''
+            data = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
+            maxread -= len(data)
+            lines = (buffer+data).splitlines(True)
+            len_first_line = len(lines[0])
+            # be sure that the first line does not become too big
+            if len_first_line > self.buffer_size:
+                # at the same time don't split a '\r\n' accidentally
+                if (len_first_line == self.buffer_size+1 and
+                    lines[0].endswith(_bcrnl)):
+                    splitpos = self.buffer_size - 1
+                else:
+                    splitpos = self.buffer_size
+                lines[:1] = [lines[0][:splitpos],
+                             lines[0][splitpos:]]
+            if data:
+                buffer = lines[-1]
+                lines = lines[:-1]
+            for line in lines:
+                if line.endswith(_bcrnl): yield line[:-2], _bcrnl
+                elif line.endswith(_bnl): yield line[:-1], _bnl
+                elif line.endswith(_bcr): yield line[:-1], _bcr
+                else:                     yield line, _bempty
+            if not data:
+                break
     
     def _iterparse(self):
         lines, line = self._lineiter(), ''
