@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import unittest
-import sys, os.path
+import sys, os.path, tempfile
 import multipart as mp
 from multipart import tob
 import base64
@@ -144,6 +144,29 @@ class TestMultipartParser(unittest.TestCase):
         self.assertEqual(p.get('file1').value, test_file)
         self.assertTrue(hasattr(p.get('file1').value, 'encode'))
 
+    def test_save_as(self):
+        ''' save_as stores data in a file keeping the file position. '''
+        def tmp_file_name():
+            # create a temporary file name (on Python 2.6+ NamedTemporaryFile
+            # with delete=False could be used)
+            fd, fname = tempfile.mkstemp()
+            f = os.fdopen(fd)
+            f.close()
+            return fname
+        test_file = 'abc'*1024
+        boundary = '---------------------------186454651713519341951581030105'
+        request = BytesIO(tob('\r\n').join(map(tob,[
+        '--' + boundary,
+        'Content-Disposition: form-data; name="file1"; filename="random.png"',
+        'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
+        p = mp.MultipartParser(request, boundary)
+        self.assertEqual(p.get('file1').file.read(1024), tob(test_file)[:1024])
+        tfn = tmp_file_name()
+        p.get('file1').save_as(tfn)
+        tf = open(tfn, 'rb')
+        self.assertEqual(tf.read(), tob(test_file))
+        tf.close()
+        self.assertEqual(p.get('file1').file.read(), tob(test_file)[1024:])
 
     def test_multiline_header(self):
         ''' HTTP allows headers to be multiline. '''
