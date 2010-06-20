@@ -44,7 +44,7 @@ class TestMultipartParser(unittest.TestCase):
 
     def test_line_parser(self):
         for line in ('foo',''):
-            for ending in ('\n','\r\n'):
+            for ending in ('\n','\r','\r\n'):
                 i = mp.MultipartParser(BytesIO(tob(line+ending)), 'foo')
                 i = i._lineiter().next()
                 self.assertEqual(i, (tob(line), tob(ending)))
