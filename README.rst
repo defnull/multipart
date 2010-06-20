@@ -29,7 +29,7 @@ Compared to cgi.FieldStorage()
 Todo
 ----
 
-* Support for base46 and quoted-printable transfer encoding.
+* Support for base64 and quoted-printable transfer encoding.
 
 Licence (MIT)
 -------------
