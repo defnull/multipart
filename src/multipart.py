@@ -35,8 +35,15 @@ Licence (MIT)
 
 from tempfile import TemporaryFile
 from wsgiref.headers import Headers
-import re, sys, io
-import urlparse
+import re, sys
+try:
+    from urlparse import parse_qs
+except ImportError: # pragma: no cover (fallback for Python 2.5)
+    from cgi import parse_qs
+try:
+    from io import BytesIO
+except ImportError: # pragma: no cover (fallback for Python 2.5)
+    from StringIO import StringIO as BytesIO
 
 ##############################################################################
 ################################ Helper & Misc ################################
@@ -45,7 +52,7 @@ import urlparse
 
 try:
     from collections import MutableMapping as DictMixin
-except ImportError: # pragma: no cover
+except ImportError: # pragma: no cover (fallback for Python 2.5)
     from UserDict import DictMixin
 
 class MultiDict(DictMixin):
@@ -137,7 +144,7 @@ class MultipartParser(object):
     
     def __init__(self, stream, boundary, content_length=-1,
                  disk_limit=2**30, mem_limit=2**20, memfile_limit=2**18,
-                 buffer_size=2**16, charset='latin9'):
+                 buffer_size=2**16, charset='latin1'):
         ''' Parse a multipart/form-data byte stream. This object is an iterator
             over the parts of the message.
             
@@ -262,7 +269,7 @@ class MultipartParser(object):
 
 class MultipartPart(object):
     
-    def __init__(self, buffer_size=2**16, memfile_limit=2**18, charset='latin9'):
+    def __init__(self, buffer_size=2**16, memfile_limit=2**18, charset='latin1'):
         self.headerlist = []
         self.headers = None
         self.file = False
@@ -279,7 +286,7 @@ class MultipartPart(object):
         return self.write_header(line, nl)
 
     def write_header(self, line, nl):
-        line = line.decode(self.charset or 'latin9')
+        line = line.decode(self.charset or 'latin1')
         if not nl: raise MultipartError('Unexpected end of line in header.')
         if not line.strip(): # blank line -> end of header segment
             self.finish_header()
@@ -299,14 +306,14 @@ class MultipartPart(object):
         self._buf = nl
         if self.content_length > 0 and self.size > self.content_length:
             raise MultipartError('Size of body exceeds Content-Length header.')
-        if self.size > self.memfile_limit and isinstance(self.file, io.BytesIO):
+        if self.size > self.memfile_limit and isinstance(self.file, BytesIO):
             # TODO: What about non-file uploads that exceed the memfile_limit?
             self.file, old = TemporaryFile(mode='w+b'), self.file
             old.seek(0)
             copy_file(old, self.file, self.size, self.buffer_size)
 
     def finish_header(self):
-        self.file = io.BytesIO()
+        self.file = BytesIO()
         self.headers = Headers(self.headerlist)
         cdis = self.headers.get('Content-Disposition','')
         ctype = self.headers.get('Content-Type','')
@@ -322,7 +329,7 @@ class MultipartPart(object):
 
     def is_buffered(self):
         ''' Return true if the data is fully buffered in memory.'''
-        return isinstance(self.file, io.BytesIO)
+        return isinstance(self.file, BytesIO)
 
     @property
     def value(self):
@@ -334,11 +341,13 @@ class MultipartPart(object):
         return val.decode(self.charset)
     
     def save_as(self, path):
+        fp = open(path, 'wb')
         pos = self.file.tell()
-        self.file.seek(0)
-        with open(path, 'wb') as fp:
+        try:
+            self.file.seek(0)
             size = copy_file(self.file, fp)
-        self.file.seek(pos)
+        finally:
+            self.file.seek(pos)
         return size
 
 ##############################################################################
@@ -369,7 +378,7 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
         if not content_type:
             raise MultipartError("Missing Content-Type header.")
         content_type, options = parse_options_header(content_type)
-        stream = environ.get('wsgi.input') or io.BytesIO()
+        stream = environ.get('wsgi.input') or BytesIO()
         kw['charset'] = charset = options.get('charset', charset)
         if content_type == 'multipart/form-data':
             boundary = options.get('boundary','')
@@ -388,7 +397,7 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
             data = stream.read(mem_limit).decode(charset)
             if stream.read(1): # These is more that does not fit mem_limit
                 raise MultipartError("Request to big. Increase MAXMEM.")
-            data = urlparse.parse_qs(data, keep_blank_values=True)
+            data = parse_qs(data, keep_blank_values=True)
             for key, values in data.iteritems():
                 for value in values:
                     forms[key] = value

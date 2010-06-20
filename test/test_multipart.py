@@ -3,7 +3,11 @@ import unittest
 import sys, os.path
 import multipart as mp
 from multipart import tob
-import base64, io
+import base64
+try:
+    from io import BytesIO
+except ImportError:
+    from StringIO import StringIO as BytesIO
 
 #TODO: bufsize=10, line=1234567890--boundary\n
 #TODO: bufsize < len(boundary) (should not be possible)
@@ -41,39 +45,39 @@ class TestMultipartParser(unittest.TestCase):
     def test_line_parser(self):
         for line in ('foo',''):
             for ending in ('\n','\r\n'):
-                i = mp.MultipartParser(io.BytesIO(tob(line+ending)), 'foo')
+                i = mp.MultipartParser(BytesIO(tob(line+ending)), 'foo')
                 i = i._lineiter().next()
                 self.assertEqual(i, (tob(line), tob(ending)))
 
     def test_iterlines(self):
         data = 'abc\ndef\r\nghi'
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('ghi'),tob(''))]
-        i = mp.MultipartParser(io.BytesIO(tob(data)), 'foo')._lineiter()
+        i = mp.MultipartParser(BytesIO(tob(data)), 'foo')._lineiter()
         self.assertEqual(list(i), result)
     
     def test_iterlines_limit(self):
         data, limit = 'abc\ndef\r\nghi', 10
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('g'),tob(''))]
-        i = mp.MultipartParser(io.BytesIO(tob(data)), 'foo', limit)._lineiter()
+        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', limit)._lineiter()
         self.assertEqual(list(i), result)
         data, limit = 'abc\ndef\r\nghi', 8
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r'))]
-        i = mp.MultipartParser(io.BytesIO(tob(data)), 'foo', limit)._lineiter()
+        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', limit)._lineiter()
         self.assertEqual(list(i), result)
 
     def test_iterlines_maxbuf(self):
         data, limit = 'abcdefgh\nijklmnop\r\nq', 9
         result = [(tob('abcdefgh'),tob('\n')),(tob('ijklmnop'),tob('')),(tob(''),tob('\r\n')),(tob('q'),tob(''))]
-        i = mp.MultipartParser(io.BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
+        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
         self.assertEqual(list(i), result)
         data, limit = ('X'*3*1024)+'x\n', 1024
         result = [(tob('X'*1024),tob('')),(tob('X'*1024),tob('')),(tob('X'*1024),tob('')),(tob('x'),tob('\n'))]
-        i = mp.MultipartParser(io.BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
+        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
         self.assertEqual(list(i), result)
 
     def test_copyfile(self):
-        source = io.BytesIO(tob('abc'))
-        target = io.BytesIO()
+        source = BytesIO(tob('abc'))
+        target = BytesIO()
         self.assertEqual(mp.copy_file(source, target), 3)
         target.seek(0)
         self.assertEqual(target.read(), tob('abc'))
@@ -83,7 +87,7 @@ class TestMultipartParser(unittest.TestCase):
             it is written to disk. '''
         test_file = 'abc'*1024
         boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary,
@@ -102,7 +106,7 @@ class TestMultipartParser(unittest.TestCase):
     def test_get_all(self):
         ''' Test the get() and get_all() methods. '''
         boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', 'abc'*1024, '--' + boundary,
@@ -119,7 +123,7 @@ class TestMultipartParser(unittest.TestCase):
         ''' The file object should be readable withoud a seek(0). '''
         test_file = 'abc'*1024
         boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
@@ -131,7 +135,7 @@ class TestMultipartParser(unittest.TestCase):
         ''' The .value property always returns unicode '''
         test_file = 'abc'*1024
         boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
@@ -146,7 +150,7 @@ class TestMultipartParser(unittest.TestCase):
         test_file = tob('abc'*1024)
         test_text = u'Test text\n with\r\n ümläuts!'
         boundary = '---------------------------186454651713519341951581030105'
-        request = io.BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
         'Content-Disposition: form-data;',
         '\tname="file1"; filename="random.png"',
@@ -162,7 +166,7 @@ class TestMultipartParser(unittest.TestCase):
 
 class TestFormParser(unittest.TestCase):
     def setUp(self):
-        self.data = io.BytesIO()
+        self.data = BytesIO()
         self.env = {'REQUEST_METHOD':'POST',
                     'CONTENT_TYPE':'multipart/form-data; boundary=foo',
                     'wsgi.input': self.data}
@@ -202,7 +206,7 @@ class TestFormParser(unittest.TestCase):
 
 class TestBrokenMultipart(unittest.TestCase):
     def setUp(self):
-        self.data = io.BytesIO()
+        self.data = BytesIO()
         self.env = {'REQUEST_METHOD':'POST',
                     'CONTENT_TYPE':'multipart/form-data; boundary=foo',
                     'wsgi.input': self.data}
@@ -670,7 +674,7 @@ class TestWerkzeugExamples(unittest.TestCase):
             forms = browser_test_cases[name]['forms']
             env = {'REQUEST_METHOD': 'POST',
                    'CONTENT_TYPE': 'multipart/form-data; boundary=%s'%boundary,
-                   'wsgi.input': io.BytesIO(browser_test_cases[name]['data'])}
+                   'wsgi.input': BytesIO(browser_test_cases[name]['data'])}
             rforms, rfiles = mp.parse_form_data(env, strict=True, charset='utf8')
             for field in files:
                 self.assertEqual(rfiles[field].name, field)
