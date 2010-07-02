@@ -1,6 +1,6 @@
 rm -r ./test.run &>/dev/null
 cp -r ./test ./test.run
-cp ./src/* ./test.run/
+cp ./multipart.py ./test.run/
 cd test.run
 
 coverage run ./test.py
