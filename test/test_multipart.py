@@ -129,7 +129,7 @@ class TestMultipartParser(unittest.TestCase):
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
         p = mp.MultipartParser(request, boundary)
         self.assertEqual(p.get('file1').file.read(), tob(test_file))
-        self.assertEqual(p.get('file1').value, test_file)
+        self.assertEqual(p.get('file1').value(2**16), test_file)
 
     def test_unicode_value(self):
         ''' The .value property always returns unicode '''
@@ -141,8 +141,8 @@ class TestMultipartParser(unittest.TestCase):
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
         p = mp.MultipartParser(request, boundary)
         self.assertEqual(p.get('file1').file.read(), tob(test_file))
-        self.assertEqual(p.get('file1').value, test_file)
-        self.assertTrue(hasattr(p.get('file1').value, 'encode'))
+        self.assertEqual(p.get('file1').value(2**16), test_file)
+        self.assertTrue(hasattr(p.get('file1').value(2**16), 'encode'))
 
     def test_save_as(self):
         ''' save_as stores data in a file keeping the file position. '''
@@ -184,7 +184,7 @@ class TestMultipartParser(unittest.TestCase):
         p = mp.MultipartParser(request, boundary, charset='utf8')
         self.assertEqual(p.get('file1').file.read(), test_file)
         self.assertEqual(p.get('file1').filename, 'random.png')
-        self.assertEqual(p.get('text').value, test_text)
+        self.assertEqual(p.get('text').value(2**16), test_text)
 
 
 class TestFormParser(unittest.TestCase):
@@ -316,6 +316,14 @@ class TestBrokenMultipart(unittest.TestCase):
                    'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
         self.assertMPError(mem_limit=1024*3)
+
+    def test_mem_limit_form_field(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
+                   'abc'*1024, '\r\n', '--foo\r\n',
+                   'Content-Disposition: form-data; name="text2"\r\n', '\r\n',
+                   'abc'*1024, '\r\n', '--foo--')
+        self.assertMPError(memfile_limit=1024, mem_limit=1024*3)
 
     def test_invalid_header(self):
         self.write('--foo\r\n',

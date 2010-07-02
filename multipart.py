@@ -335,13 +335,16 @@ class MultipartPart(object):
         ''' Return true if the data is fully buffered in memory.'''
         return isinstance(self.file, BytesIO)
 
-    @property
-    def value(self):
+    def value(self, limit):
         ''' Data decoded with the specified charset '''
         pos = self.file.tell()
-        self.file.seek(0)
-        val = self.file.read()
-        self.file.seek(pos)
+        try:
+            self.file.seek(0)
+            val = self.file.read(limit)
+            if self.file.read(1):
+                raise MultipartError("Request to big. Increase mem_limit.")
+        finally:
+            self.file.seek(pos)
         return val.decode(self.charset)
     
     def save_as(self, path):
@@ -384,23 +387,25 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
         content_type, options = parse_options_header(content_type)
         stream = environ.get('wsgi.input') or BytesIO()
         kw['charset'] = charset = options.get('charset', charset)
+        mem_limit = kw.get('mem_limit', 2**20)
         if content_type == 'multipart/form-data':
             boundary = options.get('boundary','')
             if not boundary:
                 raise MultipartError("No boundary for multipart/form-data.")
             for part in MultipartParser(stream, boundary, content_length, **kw):
-                if part.filename or not part.is_buffered():
+                if part.filename:
                     files[part.name] = part
-                else: # TODO: Big form-fields are in the files dict. really?
-                    forms[part.name] = part.value
+                else:
+                    value = part.value(mem_limit)
+                    mem_limit -= len(value)
+                    forms[part.name] = value
         elif content_type in ('application/x-www-form-urlencoded',
                               'application/x-url-encoded'):
-            mem_limit = kw.get('mem_limit', 2**20)
             if content_length > mem_limit:
-                raise MultipartError("Request to big. Increase MAXMEM.")
+                raise MultipartError("Request to big. Increase mem_limit.")
             data = stream.read(mem_limit).decode(charset)
             if stream.read(1): # These is more that does not fit mem_limit
-                raise MultipartError("Request to big. Increase MAXMEM.")
+                raise MultipartError("Request to big. Increase mem_limit.")
             data = parse_qs(data, keep_blank_values=True)
             for key, values in data.iteritems():
                 for value in values:
