@@ -39,7 +39,7 @@ __license__ = 'MIT'
 
 from tempfile import TemporaryFile
 from wsgiref.headers import Headers
-import re, sys
+import re, sys, binascii, quopri
 try:
     from urlparse import parse_qs
 except ImportError: # pragma: no cover (fallback for Python 2.5)
@@ -305,6 +305,14 @@ class MultipartPart(object):
 
     def write_body(self, line, nl):
         if not line and not nl: return # This does not even flush the buffer
+        if self.content_transfer_encoding and not nl:
+            raise MultipartError('Line too long on transfer_encoded chunk.')
+        if self.content_transfer_encoding == 'quoted-printable':
+            if line.endswith(tob('=')):
+                nl = tob('')
+            line = quopri.decodestring(line)
+        elif self.content_transfer_encoding == 'base64':
+            line, nl = binascii.a2b_base64(line), tob('')
         self.size += len(line) + len(self._buf)
         self.file.write(self._buf + line)
         self._buf = nl
@@ -329,6 +337,9 @@ class MultipartPart(object):
         self.content_type, options = parse_options_header(ctype)
         self.charset = options.get('charset') or self.charset
         self.content_length = int(self.headers.get('Content-Length','-1'))
+        self.content_transfer_encoding = self.headers.get('Content-Transfer-Encoding')
+        if self.content_transfer_encoding not in [None, 'base64', 'quoted-printable']:
+            raise MultipartError('invalid Content-Transfer-Encoding')
 
     def is_buffered(self):
         ''' Return true if the data is fully buffered in memory.'''

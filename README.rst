@@ -15,6 +15,7 @@ Features
 * Fast memory mapped files (io.BytesIO) for small uploads.
 * Temporary files on disk for big uploads.
 * Memory and disk resource limits to prevent DOS attacks.
+* Support for base64 and quoted-printable transfer encoding.
 * 100% test coverage.
 
 Compared to cgi.FieldStorage()
@@ -24,12 +25,6 @@ Compared to cgi.FieldStorage()
 * Consumes bytes regardless of Python version.
 * Is desgined for WSGI, not CGI.
 * Is not broken.
-
-
-Todo
-----
-
-* Support for base64 and quoted-printable transfer encoding.
 
 Licence (MIT)
 -------------

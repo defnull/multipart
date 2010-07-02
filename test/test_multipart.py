@@ -218,6 +218,18 @@ class TestFormParser(unittest.TestCase):
        self.assertEqual(files['file1'].name, 'file1')
        self.assertEqual(files['file1'].content_type, 'image/png')
 
+    def test_encodings(self):
+       # academic test cases; real world examples would be great
+       forms, files = self.parse('--foo\r\n',
+                   'Content-Transfer-Encoding: base64\r\n',
+                   'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
+                   'c3BhbQ==\r\n', '--foo\r\n',
+                   'Content-Transfer-Encoding: quoted-printable\r\n',
+                   'Content-Disposition: form-data; name="text2"\r\n', '\r\n',
+                   '=3Deggs=\r\n\r\n', '--foo--')
+       self.assertEqual(forms['text1'], 'spam')
+       self.assertEqual(forms['text2'], '=eggs')
+
     def test_urlencoded(self):
        for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
            self.env['CONTENT_TYPE'] = ctype
@@ -338,6 +350,26 @@ class TestBrokenMultipart(unittest.TestCase):
                    'Content-Type: image/png\r\n',
                    'Content-Length: 111\r\n', '\r\n', 'abc'*1024+'\r\n', '--foo--')
         self.assertMPError()
+
+    def test_encoding_invalid(self):
+        self.write('--foo\r\n',
+                   'Content-Transfer-Encoding: invalid\r\n',
+                   'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
+                   'c3BhbQ==\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_encoding_line_too_long(self):
+        try:
+            base64.encodebytes
+        except:
+            encode = base64.encodestring
+        else:
+            encode = base64.encodebytes
+        self.write('--foo\r\n',
+                   'Content-Transfer-Encoding: base64\r\n',
+                   'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
+                   encode(b'abc'*1024).replace(tob('\n'), tob('')), '\r\n', '--foo--')
+        self.assertMPError(buffer_size=1024)
 
     def test_no_disposition_header(self):
         self.write('--foo\r\n',
