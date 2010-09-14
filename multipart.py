@@ -101,6 +101,42 @@ def copy_file(stream, target, maxread=-1, buffer_size=2*16):
         target.write(part)
         size += len(part)
 
+def lineiter(stream, limit=2^13, readlimit=-1):
+    ''' Read from a binary stream and yield (line, terminator) tuples. The
+        stream object must implement a `read(bytes)` method.
+        
+        All common line terminataors are recognized (NL, CR and CRNL). CR is
+        only considered if it is not followed by a NL. Lines that exceed a size
+        of `limit` bytes (excluding terminator) are split into chunks of `limit`
+        bytes. The terminator is an empty byte string for all but the last chunk
+        of a line. If `readlimit` is set, no more than `readlimit` bytes are
+        read from the stream. At no time more than (limit+2)*2 bytes are
+        buffered in memory.
+    '''
+    read = stream.read
+    crnl = tob('\r\n') # 2to3 hack (be sure to get bytes and not unciode)
+    cr, nl, empty = crnl[:1], crnl[1:], crnl[:0]
+    cache = empty # buffer for the last (partial) line
+    while 1:
+        # Read chunk so that cache+chunk fits into $limit+2 bytes
+        memlimit = limit - len(cache) + 2
+        chunk = read(memlimit if readlimit < 0 else min(readlimit, memlimit))
+        readlimit -= len(chunk)
+        # Split lines.
+        lines = (cache+chunk).splitlines(True)
+        cache = lines.pop() if chunk else empty
+        if len(cache) >= limit:
+            split = limit if cache[limit] != cr else limit-1
+            lines.append(cache[:split])
+            cache = cache[split:]
+        for line in lines:
+            if line.endswith(crnl): yield line[:-2], crnl
+            elif line.endswith(nl): yield line[:-1], nl
+            elif line.endswith(cr): yield line[:-1], cr
+            else:                   yield line, empty
+        if not chunk:
+            break
+
 ##############################################################################
 ################################ Header Parser ################################
 ##############################################################################
@@ -193,47 +229,9 @@ class MultipartParser(object):
         ''' Return a list of parts with that name. '''
         return [p for p in self if p.name == name]
 
-    def _lineiter(self):
-        ''' Iterate over a binary file-like object line by line. Each line is
-            returned as a (line, line_ending) tuple. If the line does not fit
-            into self.buffer_size, line_ending is empty and the rest of the line
-            is returned with the next iteration.
-        '''
-        read = self.stream.read
-        maxread, maxbuf = self.content_length, self.buffer_size
-        _bcrnl = tob('\r\n')
-        _bcr = _bcrnl[:1]
-        _bnl = _bcrnl[1:]
-        _bempty = _bcrnl[:0] # b'rn'[:0] -> b''
-        buffer = _bempty # buffer for the last (partial) line
-        while 1:
-            data = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
-            maxread -= len(data)
-            lines = (buffer+data).splitlines(True)
-            len_first_line = len(lines[0])
-            # be sure that the first line does not become too big
-            if len_first_line > self.buffer_size:
-                # at the same time don't split a '\r\n' accidentally
-                if (len_first_line == self.buffer_size+1 and
-                    lines[0].endswith(_bcrnl)):
-                    splitpos = self.buffer_size - 1
-                else:
-                    splitpos = self.buffer_size
-                lines[:1] = [lines[0][:splitpos],
-                             lines[0][splitpos:]]
-            if data:
-                buffer = lines[-1]
-                lines = lines[:-1]
-            for line in lines:
-                if line.endswith(_bcrnl): yield line[:-2], _bcrnl
-                elif line.endswith(_bnl): yield line[:-1], _bnl
-                elif line.endswith(_bcr): yield line[:-1], _bcr
-                else:                     yield line, _bempty
-            if not data:
-                break
-    
     def _iterparse(self):
-        lines, line = self._lineiter(), ''
+        lines = lineiter(self.stream, self.buffer_size, self.content_length)
+        line = ''
         separator = tob('--') + tob(self.boundary)
         terminator = tob('--') + tob(self.boundary) + tob('--')
         # Consume first boundary. Ignore leading blank lines

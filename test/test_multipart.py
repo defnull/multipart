@@ -44,34 +44,33 @@ class TestMultipartParser(unittest.TestCase):
     def test_line_parser(self):
         for line in ('foo',''):
             for ending in ('\n','\r','\r\n'):
-                i = mp.MultipartParser(BytesIO(tob(line+ending)), 'foo')
-                i = i._lineiter().next()
+                i = mp.lineiter(BytesIO(tob(line+ending))).next()
                 self.assertEqual(i, (tob(line), tob(ending)))
 
     def test_iterlines(self):
         data = 'abc\ndef\r\nghi'
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('ghi'),tob(''))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo')._lineiter()
+        i = mp.lineiter(BytesIO(tob(data)))
         self.assertEqual(list(i), result)
     
     def test_iterlines_limit(self):
         data, limit = 'abc\ndef\r\nghi', 10
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('g'),tob(''))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', limit)._lineiter()
+        i = mp.lineiter(BytesIO(tob(data)), readlimit=limit)
         self.assertEqual(list(i), result)
         data, limit = 'abc\ndef\r\nghi', 8
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r'))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', limit)._lineiter()
+        i = mp.lineiter(BytesIO(tob(data)), readlimit=limit)
         self.assertEqual(list(i), result)
 
     def test_iterlines_maxbuf(self):
         data, limit = 'abcdefgh\nijklmnop\r\nq', 9
-        result = [(tob('abcdefgh'),tob('\n')),(tob('ijklmnop'),tob('')),(tob(''),tob('\r\n')),(tob('q'),tob(''))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
+        result = [(tob('abcdefgh'),tob('\n')),(tob('ijklmnop'),tob('\r\n')),(tob('q'),tob(''))]
+        i = mp.lineiter(BytesIO(tob(data)), limit)
         self.assertEqual(list(i), result)
         data, limit = ('X'*3*1024)+'x\n', 1024
         result = [(tob('X'*1024),tob('')),(tob('X'*1024),tob('')),(tob('X'*1024),tob('')),(tob('x'),tob('\n'))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
+        i = mp.lineiter(BytesIO(tob(data)), limit)
         self.assertEqual(list(i), result)
 
     def test_copyfile(self):
