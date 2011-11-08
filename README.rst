@@ -1,3 +1,8 @@
+This is a fork; upstream is at https://github.com/defnull/multipart.
+This fork uses the same source with Python 2.6+ and Python 3. (Python2.5 might
+work in practice, but some tests are failing due to the measure used to make
+this single source)
+
 Parser for multipart/form-data
 ==============================
 
