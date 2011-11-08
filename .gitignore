@@ -1,1 +1,5 @@
 MANIFEST
+*.pyc
+__pycache__/
+html/
+test.run/
