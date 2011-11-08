@@ -48,6 +48,10 @@ try:
     from io import BytesIO
 except ImportError: # pragma: no cover (fallback for Python 2.5)
     from StringIO import StringIO as BytesIO
+try:
+    unicode
+except NameError:
+    unicode = str
 
 ##############################################################################
 ################################ Helper & Misc ################################

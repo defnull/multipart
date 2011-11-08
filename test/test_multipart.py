@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 import unittest
 import sys, os.path, tempfile
 import multipart as mp
@@ -169,7 +170,7 @@ class TestMultipartParser(unittest.TestCase):
     def test_multiline_header(self):
         ''' HTTP allows headers to be multiline. '''
         test_file = tob('abc'*1024)
-        test_text = u'Test text\n with\r\n ümläuts!'
+        test_text = 'Test text\n with\r\n ümläuts!'
         boundary = '---------------------------186454651713519341951581030105'
         request = BytesIO(tob('\r\n').join(map(tob,[
         '--' + boundary,
@@ -424,7 +425,7 @@ MTkzNDE5NTE1ODEwMzAxMDUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0i
 dGV4dCINCg0KZXhhbXBsZSB0ZXh0DQotLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLTE4NjQ1
 NDY1MTcxMzUxOTM0MTk1MTU4MTAzMDEwNS0tDQo=''')),
 'boundary':'---------------------------186454651713519341951581030105',
-'files': {'file1': (u'anchor.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': ('anchor.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAGdSURBVDjLpVMxa8JAFL6rAQUHXQoZpLU/
 oUOnDtKtW/MDBFHHThUKTgrqICgOEtd2EVxb2qFkKTgVChbSCnZTiVBEMBRLiEmafleCDaWxDX3w
@@ -435,7 +436,7 @@ b2cymbG7gnK5vIX9USwWI1yAI/KjLGK7teEI8HN1TizrnZWdRxxsNps8vI3YLpVKbB2EWB6XkMHz
 gAlvriYRSW+app1Mpy/jSCRSRSyDUON5nuJGytaAHI/vVPv9p/FischivL96gEP2bGxorhVFqYXD
 YQFCScwBYa9EKU1OlAkB+QLEU2AGaJ7PWKlUDiF2BBw4P9Mt/KUoije+5uAv9gGcjD6Kg4wu3AAA
 AABJRU5ErkJggg=='''))),
-          'file2': (u'application_edit.png', 'image/png', base64.b64decode(tob('''
+          'file2': ('application_edit.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJRSURBVBgZpcHda81xHMDx9+d3fudYzuYw
 2RaZ5yTWolEiuZpCSjGJFEktUUr8A6ZxQZGHmDtqdrGUXHgoeZqSp1F2bLFWjtkOB8PZzvmd7+dj
@@ -449,7 +450,7 @@ KFu4jvynJiIxIzcwg/SjF1RsOk9R+QJMlZCvqvwhQFdbM4XvrynIVHpfn2ZSWYyhzHS+PUtSueUC
 0cQ0QmpGyE9197TUnwzq1DnUKbXSxOb6S7xtPkjngzbGVVbzvS/FjaGt9DU8xlRRJdTCMDEzRjuy
 Z1FwaFe9j+d4eecaPd1dPxNTSlfWHm1v5y/EzBitblXp4JLZ5f6yBbOwaK5tsD+9c33jq/f8w2+m
 RSjOllPhkAAAAABJRU5ErkJggg==''')))},
-'forms': {'text': u'example text'}}
+'forms': {'text': 'example text'}}
 
 browser_test_cases['firefox3-2pnglongtext'] = {'data': base64.b64decode(tob('''
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcxMTc0
@@ -489,7 +490,7 @@ MTc0OA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJ0ZXh0Ig0KDQotLWxv
 bmcgdGV4dA0KLS13aXRoIGJvdW5kYXJ5DQotLWxvb2thbGlrZXMtLQ0KLS0tLS0tLS0tLS0tLS0t
 LS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcxMTc0OC0tDQo=''')),
 'boundary':'---------------------------14904044739787191031754711748',
-'files': {'file1': (u'accept.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': ('accept.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAKfSURBVDjLpZPrS1NhHMf9O3bOdmwDCWRE
 IYKEUHsVJBI7mg3FvCxL09290jZj2EyLMnJexkgpLbPUanNOberU5taUMnHZUULMvelCtWF0sW/n
@@ -504,7 +505,7 @@ UT0hh9p9EnXT5Vh6t4C22QaUDh6HwnECOmcO7K+6kW49DKqS2DrEZCtfuI+9GrNHg4fMHVSO5kE7
 nAPVkAxKBxcOzsajpS4Yh4ohUPPWKTUh3PaQEptIOr6BiJjcZXCwktaAGfrRIpwblqOV3YKdhfXO
 IvBLeREWpnd8ynsaSJoyESFphwTtfjN6X1jRO2+FxWtCWksqBApeiFIR9K6fiTpPiigDoadqCEag
 5YUFKl6Yrciw0VOlhOivv/Ff8wtn0KzlebrUYwAAAABJRU5ErkJggg=='''))),
-          'file2': (u'add.png', 'image/png', base64.b64decode(tob('''
+          'file2': ('add.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJvSURBVDjLpZPrS5NhGIf9W7YvBYOkhlko
 qCklWChv2WyKik7blnNris72bi6dus0DLZ0TDxW1odtopDs4D8MDZuLU0kXq61CijSIIasOvv94V
@@ -518,7 +519,7 @@ XPT71Ojy3sMFdfJRCeKxEsVtKwFHwALZfCUk3tIfNR8XiJwc1LmL4dg141JPKtj3WUdNFJqLGFVP
 C4OkR4BxajTWsChY64wmCnMxsWPCHcutKBxMVp5mxA1S+aMComToaqTRUQknLTH62kHOVEE+VQnj
 ahscNCy0cMBWsSI0TCQcZc5ALkEYckL5A5noWSBhfm2AecMAjbcRWV0pUTh0HE64TNf0mczcnnQy
 u/MilaFJCae1nw2fbz1DnVOxyGTlKeZft/Ff8x1BRssfACjTwQAAAABJRU5ErkJggg==''')))},
-'forms': {'text': u'--long text\r\n--with boundary\r\n--lookalikes--'}}
+'forms': {'text': '--long text\r\n--with boundary\r\n--lookalikes--'}}
 
 browser_test_cases['opera8-2png1txt'] = {'data': base64.b64decode(tob('''
 LS0tLS0tLS0tLS0tekVPOWpRS21MYzJDcTg4YzIzRHgxOQ0KQ29udGVudC1EaXNwb3NpdGlvbjog
@@ -553,7 +554,7 @@ rkJggg0KLS0tLS0tLS0tLS0tekVPOWpRS21MYzJDcTg4YzIzRHgxOQ0KQ29udGVudC1EaXNwb3Np
 dGlvbjogZm9ybS1kYXRhOyBuYW1lPSJ0ZXh0Ig0KDQpibGFmYXNlbCDDtsOkw7wNCi0tLS0tLS0t
 LS0tLXpFTzlqUUttTGMyQ3E4OGMyM0R4MTktLQ0K''')),
 'boundary':'----------zEO9jQKmLc2Cq88c23Dx19',
-'files': {'file1': (u'arrow_branch.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': ('arrow_branch.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAHYSURBVDjLlVLPS1RxHJynpVu7KEn0Vt+2
 l6IO5qGCIsIwCPwD6hTUaSk6REoUHeoQ0qVAMrp0COpY0SUIPVRgSl7ScCUTst6zIoqg0y7lvpnP
@@ -565,7 +566,7 @@ jYjSYuncngtdhakbM5dXlhgTNEMYLqB9q49MKgsPjTBXntVgkDNIgmI1VY2Q7QzgJ9rx++ci3ofz
 iBYiiELQEUAyhB/D29M3Zy+uIkDIhGYvgeKvIkbHxz6Tevzq6ut+ANh9fldetMn80OzZVVdgLFjB
 Q0tpEz68jcB4ifx3pQeictVXIEETnBPCKMLEwBIZAPJD767V/ETGwsjzYYiC6vzEP9asLo3SGuQv
 AAAAAElFTkSuQmCC'''))),
-          'file2': (u'award_star_bronze_1.png', 'image/png', base64.b64decode(tob('''
+          'file2': ('award_star_bronze_1.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJvSURBVDjLhZNNSFRRFIC/N++9eWMzhkl/
 ZJqFMQMRFvTvImkXSdKiVRAURBRRW1eZA9EqaNOiFlZEtQxKyrJwUS0K+qEQzaTE/AtLHR3Hmffu
@@ -579,7 +580,7 @@ zDTi50AMVngJNgrnUweRbwMPiLpHrOJDOl9Vh6HD7GyO52qa0VPj6MwUJpNC5mYQS/DUJLH3zzRp
 jIbgzxp20lwb6Vp0jADYkQO6IpHfuoqInSJUVoE2HrpyRQ1tic2LC9p3lSHWPh2rJfL1MeVP2weW
 vHp8s3ziNZ49i1q6HrR1YHGBNnt1dG2Z++gC4TdvrqNkK1eHj7ljQ/ujHx6NyPw8BFIiKPmNpKar
 7P7xb/zyT9P+o7OYvzzYSUt8U+TzxytodixEfgN3CFlQMNAcMgAAAABJRU5ErkJggg==''')))},
-'forms': {'text': u'blafasel öäü'}}
+'forms': {'text': 'blafasel öäü'}}
 
 browser_test_cases['webkit3-2png1txt'] = {'data': base64.b64decode(tob('''
 LS0tLS0tV2ViS2l0Rm9ybUJvdW5kYXJ5amRTRmhjQVJrOGZ5R055Ng0KQ29udGVudC1EaXNwb3Np
@@ -626,7 +627,7 @@ b250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9InRleHQiDQoNCnRoaXMgaXMgYW5v
 dGhlciB0ZXh0IHdpdGggw7xtbMOkw7x0cw0KLS0tLS0tV2ViS2l0Rm9ybUJvdW5kYXJ5amRTRmhj
 QVJrOGZ5R055Ni0tDQo=''')),
 'boundary':'----WebKitFormBoundaryjdSFhcARk8fyGNy6',
-'files': {'file1': (u'gtk-apply.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': ('gtk-apply.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAAN1wAADdcBQiibeAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAANnSURB
 VDiNldJ9aJVVHAfw7znPuS/PvW4405WbLWfbsBuNbramq5Tp7mLqIFPXINlwpAitaCAPjWKgBdXz
@@ -645,7 +646,7 @@ zW63+8BLzzX6H1lSSrtjBzFpRPBkZi0mrk3Z7Z2tP5xqMiruhP0PTKL5EqMnSgKr87eUvSqPGf3I
 psux53CDpie0QFjhf90NhBDiVlJ1LaqmcqXq2l/7aU7826E94rWjQb3iXbYXgAzAC8ADwI1//zF1
 OkQIAUIIBSAlc6tfpkjr52XTj4SFi937eP3MmDAB2I5YyaT63AmyuVDHmAAQt0FOzARg/aeGhBCS
 3EjnCBygMwKAnXL+AdDkiZ/xYgR3AAAAAElFTkSuQmCC'''))),
-          'file2': (u'gtk-no.png', 'image/png', base64.b64decode(tob('''
+          'file2': ('gtk-no.png', 'image/png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAAN1wAADdcBQiibeAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAM1SURB
 VDiNrZTPaxtHFMc/M7uzs7KobckyDjQxtoPbnlJyMBRKgsGFHkwvvfbuU/+BQCilBHrof+BT7zmV
@@ -663,7 +664,7 @@ wdZRvz9oDgboWg2MQSYakeXvGIOen+d4MKDR6w2vYKvgjM+yUmrqM/h4Bb69ba1/r1z2SlGEmyQj
 EwPiusTGMPA8fuz348PhcPg7fP4d/AC8EJHoOnAGqC3C8qfwZVWptXc9z1nQ2qm5I3cFacppmmZ/
 RVF6LlJ/DN88gybwAvj3JWAOnQZqQOUjuHcTPpiH931YAhjC38/gj3/glz34GQiBc+BMRJKXlnx9
 KKWc3CmFLCN/JyMuQ+ASuJIJwH8C25TmkHULEgAAAABJRU5ErkJggg==''')))},
-'forms': {'text': u'this is another text with ümläüts'}}
+'forms': {'text': 'this is another text with ümläüts'}}
 
 browser_test_cases['ie6-2png1txt'] = {'data': base64.b64decode(tob('''
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS03ZDkxYjAzYTIwMTI4DQpDb250ZW50LURpc3Bv
@@ -699,7 +700,7 @@ LS0tLS0tLS0tLS0tLS0tLS0tLS0tLTdkOTFiMDNhMjAxMjgNCkNvbnRlbnQtRGlzcG9zaXRpb246
 IGZvcm0tZGF0YTsgbmFtZT0idGV4dCINCg0KaWU2IHN1Y2tzIDotLw0KLS0tLS0tLS0tLS0tLS0t
 LS0tLS0tLS0tLS0tLS03ZDkxYjAzYTIwMTI4LS0NCg==''')),
 'boundary':'---------------------------7d91b03a20128',
-'files': {'file1': (u'file1.png', 'image/x-png', base64.b64decode(tob('''
+'files': {'file1': ('file1.png', 'image/x-png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAGdSURBVDjLpVMxa8JAFL6rAQUHXQoZpLU/
 oUOnDtKtW/MDBFHHThUKTgrqICgOEtd2EVxb2qFkKTgVChbSCnZTiVBEMBRLiEmafleCDaWxDX3w
@@ -710,7 +711,7 @@ b2cymbG7gnK5vIX9USwWI1yAI/KjLGK7teEI8HN1TizrnZWdRxxsNps8vI3YLpVKbB2EWB6XkMHz
 gAlvriYRSW+app1Mpy/jSCRSRSyDUON5nuJGytaAHI/vVPv9p/FischivL96gEP2bGxorhVFqYXD
 YQFCScwBYa9EKU1OlAkB+QLEU2AGaJ7PWKlUDiF2BBw4P9Mt/KUoije+5uAv9gGcjD6Kg4wu3AAA
 AABJRU5ErkJggg=='''))),
-          'file2': (u'file2.png', 'image/x-png', base64.b64decode(tob('''
+          'file2': ('file2.png', 'image/x-png', base64.b64decode(tob('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJRSURBVBgZpcHda81xHMDx9+d3fudYzuYw
 2RaZ5yTWolEiuZpCSjGJFEktUUr8A6ZxQZGHmDtqdrGUXHgoeZqSp1F2bLFWjtkOB8PZzvmd7+dj
@@ -724,7 +725,7 @@ KFu4jvynJiIxIzcwg/SjF1RsOk9R+QJMlZCvqvwhQFdbM4XvrynIVHpfn2ZSWYyhzHS+PUtSueUC
 0cQ0QmpGyE9197TUnwzq1DnUKbXSxOb6S7xtPkjngzbGVVbzvS/FjaGt9DU8xlRRJdTCMDEzRjuy
 Z1FwaFe9j+d4eecaPd1dPxNTSlfWHm1v5y/EzBitblXp4JLZ5f6yBbOwaK5tsD+9c33jq/f8w2+m
 RSjOllPhkAAAAABJRU5ErkJggg==''')))},
-'forms': {'text': u'ie6 sucks :-/'}}
+'forms': {'text': 'ie6 sucks :-/'}}
 
 class TestWerkzeugExamples(unittest.TestCase):
     def test_werkzeug_examples(self):
