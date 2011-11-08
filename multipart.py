@@ -5,7 +5,7 @@ Parser for multipart/form-data
 
 This module provides a parser for the multipart/form-data format. It can read
 from a file, a socket or a WSGI environment. The parser can be used to replace
-cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
+cgi.FieldStorage (without the bugs) and works with Python 2.6+ and 3.x (2to3).
 
 Licence (MIT)
 -------------
@@ -42,11 +42,11 @@ from wsgiref.headers import Headers
 import re, sys, binascii, quopri
 try:
     from urlparse import parse_qs
-except ImportError: # pragma: no cover (fallback for Python 2.5)
+except ImportError: # pragma: no cover (fallback for Python 2.x)
     from cgi import parse_qs
 try:
     from io import BytesIO
-except ImportError: # pragma: no cover (fallback for Python 2.5)
+except ImportError: # pragma: no cover (fallback for Python 2.x)
     from StringIO import StringIO as BytesIO
 try:
     unicode
@@ -60,7 +60,7 @@ except NameError:
 
 try:
     from collections import MutableMapping as DictMixin
-except ImportError: # pragma: no cover (fallback for Python 2.5)
+except ImportError: # pragma: no cover (fallback for Python 2.x)
     from UserDict import DictMixin
 from sys import version_info
 
