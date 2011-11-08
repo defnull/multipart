@@ -45,15 +45,17 @@ class TestMultipartParser(unittest.TestCase):
     def test_line_parser(self):
         for line in ('foo',''):
             for ending in ('\n','\r','\r\n'):
-                i = mp.lineiter(BytesIO(tob(line+ending))).next()
-                self.assertEqual(i, (tob(line), tob(ending)))
+                iterator = mp.lineiter(BytesIO(tob(line+ending)))
+                for item in iterator:
+                    self.assertEqual(item, (tob(line), tob(ending)))
+                    break  # at first loop, as portable way of spelling .next()
 
     def test_iterlines(self):
         data = 'abc\ndef\r\nghi'
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('ghi'),tob(''))]
         i = mp.lineiter(BytesIO(tob(data)))
         self.assertEqual(list(i), result)
-    
+
     def test_iterlines_limit(self):
         data, limit = 'abc\ndef\r\nghi', 10
         result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('g'),tob(''))]
@@ -196,7 +198,7 @@ class TestFormParser(unittest.TestCase):
     def write(self, *lines):
         for line in lines:
             self.data.write(tob(line))
-    
+
     def parse(self, *lines, **kwargs):
         self.write(*lines)
         self.data.seek(0)
@@ -204,7 +206,7 @@ class TestFormParser(unittest.TestCase):
         kwargs['strict'] = True
         kwargs['charset'] = 'utf8'
         return mp.parse_form_data(**kwargs)
-    
+
     def test_multipart(self):
        forms, files = self.parse('--foo\r\n',
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',

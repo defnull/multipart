@@ -62,12 +62,19 @@ try:
     from collections import MutableMapping as DictMixin
 except ImportError: # pragma: no cover (fallback for Python 2.5)
     from UserDict import DictMixin
+from sys import version_info
+
+def item_iterator(some_dict):
+    "Wrapper to get an iterator over items in Python 2 or 3"
+    if version_info < (3, 0):
+        return some_dict.items()
+    return some_dict.iteritems()
 
 class MultiDict(DictMixin):
     """ A dict that remembers old values for each key """
     def __init__(self, *a, **k):
         self.dict = dict()
-        for k, v in dict(*a, **k).iteritems():
+        for k, v in item_iterator(dict(*a, **k)):
             self[k] = v
 
     def __len__(self): return len(self.dict)
@@ -88,7 +95,7 @@ class MultiDict(DictMixin):
         return self.dict[key][index]
 
     def iterallitems(self):
-        for key, values in self.dict.iteritems():
+        for key, values in item_iterator(self.dict):
             for value in values:
                 yield key, value
 
@@ -419,7 +426,7 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
             if stream.read(1): # These is more that does not fit mem_limit
                 raise MultipartError("Request to big. Increase mem_limit.")
             data = parse_qs(data, keep_blank_values=True)
-            for key, values in data.iteritems():
+            for key, values in item_iterator(data):
                 for value in values:
                     forms[key] = value
         else:
