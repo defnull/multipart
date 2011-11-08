@@ -28,7 +28,7 @@ Compared to cgi.FieldStorage()
 
 * Reads directly from a socket (no ``.readline(n)``, just ``.read(n)``).
 * Consumes bytes regardless of Python version.
-* Is desgined for WSGI, not CGI.
+* Is designed for WSGI, not CGI.
 * Is not broken.
 
 Licence (MIT)
