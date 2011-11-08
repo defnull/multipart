@@ -66,7 +66,7 @@ from sys import version_info
 
 def item_iterator(some_dict):
     "Wrapper to get an iterator over items in Python 2 or 3"
-    if version_info < (3, 0):
+    if version_info >= (3, 0):
         return some_dict.items()
     return some_dict.iteritems()
 
