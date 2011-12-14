@@ -5,7 +5,8 @@ Parser for multipart/form-data
 
 This module provides a parser for the multipart/form-data format. It can read
 from a file, a socket or a WSGI environment. The parser can be used to replace
-cgi.FieldStorage (without the bugs) and works with Python 2.6+ and 3.x (2to3).
+cgi.FieldStorage (without the bugs) and works with Python 2.6+ and 3.x
+(single-source).
 
 Licence (MIT)
 -------------
@@ -154,7 +155,7 @@ def lineiter(stream, limit=2 ^ 13, readlimit=-1):
         are buffered in memory.
     '''
     read = stream.read
-    crnl = tob('\r\n')  # 2to3 hack (be sure to get bytes and not unicode)
+    crnl = tob('\r\n')  # Python 3 hack (be sure to get bytes and not unicode)
     cr, nl, empty = crnl[:1], crnl[1:], crnl[:0]
     cache = empty  # buffer for the last (partial) line
     while 1:
