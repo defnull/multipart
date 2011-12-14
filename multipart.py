@@ -145,7 +145,7 @@ def lineiter(stream, limit=2 ^ 13, readlimit=-1):
     ''' Read from a binary stream and yield (line, terminator) tuples. The
         stream object must implement a `read(bytes)` method.
 
-        All common line terminataors are recognized (NL, CR and CRNL). CR is
+        All common line terminators are recognized (NL, CR and CRNL). CR is
         only considered if it is not followed by a NL. Lines that exceed a size
         of `limit` bytes (excluding terminator) are split into chunks of
         `limit` bytes. The terminator is an empty byte string for all but the
@@ -154,7 +154,7 @@ def lineiter(stream, limit=2 ^ 13, readlimit=-1):
         are buffered in memory.
     '''
     read = stream.read
-    crnl = tob('\r\n')  # 2to3 hack (be sure to get bytes and not unciode)
+    crnl = tob('\r\n')  # 2to3 hack (be sure to get bytes and not unicode)
     cr, nl, empty = crnl[:1], crnl[1:], crnl[:0]
     cache = empty  # buffer for the last (partial) line
     while 1:
@@ -203,7 +203,7 @@ def header_unquote(val, filename=False):
     if val[0] == val[-1] == '"':
         val = val[1:-1]
         if val[1:3] == ':\\' or val[:2] == '\\\\':
-            val = val.split('\\')[-1]  # fix ie6 bug: full path --> filename
+            val = val.split('\\')[-1]  # fix IE6 bug: full path --> filename
         return val.replace('\\\\', '\\').replace('\\"', '"')
     return val
 
@@ -290,7 +290,7 @@ class MultipartParser(object):
             raise MultipartError("Stream does not start with boundary")
         # For each part in stream...
         mem_used, disk_used = 0, 0  # Track used resources to prevent DoS
-        is_tail = False  # True if the last line was incomplete (cutted)
+        is_tail = False  # True if the last line was incomplete (cut)
         opts = {'buffer_size': self.buffer_size,
                 'memfile_limit': self.memfile_limit,
                 'charset': self.charset}
@@ -406,7 +406,7 @@ class MultipartPart(object):
             self.file.seek(0)
             val = self.file.read(limit)
             if self.file.read(1):
-                raise MultipartError("Request to big. Increase mem_limit.")
+                raise MultipartError("Request too big. Increase mem_limit.")
         finally:
             self.file.seek(pos)
         return val.decode(self.charset)
@@ -432,7 +432,7 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
         (unicode) and lists as values (multiple values per key are possible).
         The forms-dictionary contains form-field values as unicode strings.
         The files-dictionary contains :class:`MultipartPart` instances, either
-        because the form-field was a file-upload or the value is to big to fit
+        because the form-field was a file-upload or the value is too big to fit
         into memory limits.
 
         :param environ: An WSGI environment dict.
@@ -468,10 +468,10 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
         elif content_type in ('application/x-www-form-urlencoded',
                               'application/x-url-encoded'):
             if content_length > mem_limit:
-                raise MultipartError("Request to big. Increase mem_limit.")
+                raise MultipartError("Request too big. Increase mem_limit.")
             data = stream.read(mem_limit).decode(charset)
             if stream.read(1):  # These is more that does not fit mem_limit
-                raise MultipartError("Request to big. Increase mem_limit.")
+                raise MultipartError("Request too big. Increase mem_limit.")
             data = parse_qs(data, keep_blank_values=True)
             for key, values in item_iterator(data):
                 for value in values:
