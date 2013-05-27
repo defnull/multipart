@@ -338,11 +338,21 @@ class MultipartPart(object):
     @property
     def value(self):
         ''' Data decoded with the specified charset '''
+
+        return self.raw.decode(self.charset)
+    
+    @property
+    def raw(self):
+        ''' Data without decoding '''
         pos = self.file.tell()
         self.file.seek(0)
-        val = self.file.read()
-        self.file.seek(pos)
-        return val.decode(self.charset)
+        try:
+            val = self.file.read()
+        except IOError:
+            raise
+        finally:
+            self.file.seek(pos)
+        return val
     
     def save_as(self, path):
         fp = open(path, 'wb')
