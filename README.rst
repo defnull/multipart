@@ -1,20 +1,27 @@
+This is a fork; upstream is at https://github.com/defnull/multipart.
+This fork uses the same source with Python 2.6+ and Python 3. (Python2.5 might
+work in practice, but some tests are failing due to the measure used to make
+this single source)
+
 Parser for multipart/form-data
 ==============================
 
 This module provides a parser for the multipart/form-data format. It can read
 from a file, a socket or a WSGI environment. The parser can be used to replace
-cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
+cgi.FieldStorage (without the bugs) and works with Python 2.6+ and 3.x
+(single-source).
 
 Features
 --------
 
-* Python 2.5+ and 3.x (2to3) support. No dependencies.
+* Python 2.6+ and 3.x (single-source) support. No dependencies.
 * Parses multipart/form-data and application/x-url-encoded.
 * Produces useful error messages in 'strict'-mode.
 * Uploads of unknown size (missing Content-Length header).
 * Fast memory mapped files (io.BytesIO) for small uploads.
 * Temporary files on disk for big uploads.
 * Memory and disk resource limits to prevent DOS attacks.
+* Support for base64 and quoted-printable transfer encoding.
 * 100% test coverage.
 
 Compared to cgi.FieldStorage()
@@ -22,14 +29,8 @@ Compared to cgi.FieldStorage()
 
 * Reads directly from a socket (no ``.readline(n)``, just ``.read(n)``).
 * Consumes bytes regardless of Python version.
-* Is desgined for WSGI, not CGI.
+* Is designed for WSGI, not CGI.
 * Is not broken.
-
-
-Todo
-----
-
-* Support for base64 and quoted-printable transfer encoding.
 
 Licence (MIT)
 -------------
