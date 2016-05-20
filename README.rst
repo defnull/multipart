@@ -25,6 +25,17 @@ Compared to cgi.FieldStorage()
 * Is desgined for WSGI, not CGI.
 * Is not broken.
 
+Limitations
+-----------
+
+* Nested "multipart/mixed" parts are not supported; 
+  they are mentioned in RFC 2388, section 4.2 and deprecated (for clients) since RFC 7578, section 4.3.
+
+* The "encoded-word" method (described in RFC 2047) is not supported.
+
+* The MIME headers are expected to be encoded in the charset given to the ``Multipart``/``MultipartParser`` constructor. [For operability considerations, see RFC 7578, section 5.1.]
+
+* The size of headers are not counted against the in-memory limit.
 
 Todo
 ----
