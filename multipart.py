@@ -6,32 +6,8 @@ Parser for multipart/form-data
 This module provides a parser for the multipart/form-data format. It can read
 from a file, a socket or a WSGI environment. The parser can be used to replace
 cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
-
-Licence (MIT)
--------------
-
-    Copyright (c) 2010, Marcel Hellkamp.
-    Inspired by the Werkzeug library: http://werkzeug.pocoo.org/
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in
-    all copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-    THE SOFTWARE.
-
 '''
+
 
 __author__ = 'Marcel Hellkamp'
 __version__ = '0.1'
@@ -120,7 +96,7 @@ def header_quote(val):
 def header_unquote(val, filename=False):
     if val[0] == val[-1] == '"':
         val = val[1:-1]
-        if val[1:3] == ':\\' or val[:2] == '\\\\': 
+        if val[1:3] == ':\\' or val[:2] == '\\\\':
             val = val.split('\\')[-1] # fix ie6 bug: full path --> filename
         return val.replace('\\\\','\\').replace('\\"','"')
     return val
@@ -145,13 +121,13 @@ class MultipartError(ValueError): pass
 
 
 class MultipartParser(object):
-    
+
     def __init__(self, stream, boundary, content_length=-1,
                  disk_limit=2**30, mem_limit=2**20, memfile_limit=2**18,
                  buffer_size=2**16, charset='latin1'):
         ''' Parse a multipart/form-data byte stream. This object is an iterator
             over the parts of the message.
-            
+
             :param stream: A file-like stream. Must implement ``.read(size)``.
             :param boundary: The multipart boundary as a byte string.
             :param content_length: The maximum number of bytes to read.
@@ -167,7 +143,7 @@ class MultipartParser(object):
             raise MultipartError('Boundary does not fit into buffer_size.')
         self._done = []
         self._part_iter = None
-    
+
     def __iter__(self):
         ''' Iterate over the parts of the multipart message. '''
         if not self._part_iter:
@@ -177,11 +153,11 @@ class MultipartParser(object):
         for part in self._part_iter:
             self._done.append(part)
             yield part
-    
+
     def parts(self):
         ''' Returns a list with all parts of the multipart message. '''
         return list(iter(self))
-    
+
     def get(self, name, default=None):
         ''' Return the first part with that name or a default value (None). '''
         for part in self:
@@ -231,7 +207,7 @@ class MultipartParser(object):
                 else:                     yield line, _bempty
             if not data:
                 break
-    
+
     def _iterparse(self):
         lines, line = self._lineiter(), ''
         separator = tob('--') + tob(self.boundary)
@@ -269,10 +245,10 @@ class MultipartParser(object):
                     raise MultipartError("Disk limit reached.")
         if line != terminator:
             raise MultipartError("Unexpected end of multipart stream.")
-            
+
 
 class MultipartPart(object):
-    
+
     def __init__(self, buffer_size=2**16, memfile_limit=2**18, charset='latin1'):
         self.headerlist = []
         self.headers = None
@@ -340,7 +316,7 @@ class MultipartPart(object):
         ''' Data decoded with the specified charset '''
 
         return self.raw.decode(self.charset)
-    
+
     @property
     def raw(self):
         ''' Data without decoding '''
@@ -353,7 +329,7 @@ class MultipartPart(object):
         finally:
             self.file.seek(pos)
         return val
-    
+
     def save_as(self, path):
         fp = open(path, 'wb')
         pos = self.file.tell()
@@ -376,13 +352,13 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
         The files-dictionary contains :class:`MultipartPart` instances, either
         because the form-field was a file-upload or the value is too big to fit
         into memory limits.
-        
+
         :param environ: An WSGI environment dict.
         :param charset: The charset to use if unsure. (default: utf8)
         :param strict: If True, raise :exc:`MultipartError` on any parsing
                        errors. These are silently ignored by default.
     '''
-        
+
     forms, files = MultiDict(), MultiDict()
     try:
         if environ.get('REQUEST_METHOD','GET').upper() not in ('POST', 'PUT'):
