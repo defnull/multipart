@@ -1,1 +1,18 @@
 MANIFEST
+__pycache__/
+*.pyc
+
+# pytest
+/.cache/
+/.pytest_cache/
+
+#env
+env/
+
+# setuptools
+/asks.egg-info/
+/build/
+/dist/
+
+# docs
+/docs/build/
