@@ -21,6 +21,7 @@ try:
     from urlparse import parse_qs
 except ImportError:  # pragma: no cover (fallback for Python 2.5)
     from cgi import parse_qs
+
 try:
     from io import BytesIO
 except ImportError:  # pragma: no cover (fallback for Python 2.5)
@@ -40,9 +41,9 @@ except ImportError:  # pragma: no cover (fallback for Python 2.5)
 class MultiDict(DictMixin):
     """ A dict that remembers old values for each key """
 
-    def __init__(self, *a, **k):
+    def __init__(self, *args, **kwargs):
         self.dict = dict()
-        for k, v in dict(*a, **k).iteritems():
+        for k, v in dict(*args, **kwargs).iteritems():
             self[k] = v
 
     def __len__(self):
@@ -93,7 +94,7 @@ def tob(data, enc="utf8"):  # Convert strings to bytes (py2 and py3)
 def copy_file(stream, target, maxread=-1, buffer_size=2 * 16):
     """ Read from :stream and write to :target until :maxread or EOF. """
     size, read = 0, stream.read
-    while 1:
+    while True:
         to_read = buffer_size if maxread < 0 else min(buffer_size, maxread - size)
         part = read(to_read)
         if not part:
@@ -103,7 +104,7 @@ def copy_file(stream, target, maxread=-1, buffer_size=2 * 16):
 
 
 ##############################################################################
-################################ Header Parser ################################
+################################ Header Parser ###############################
 ##############################################################################
 
 _special = re.escape('()<>@,;:\\"/[]?={} \t')
@@ -142,7 +143,7 @@ def parse_options_header(header, options=None):
 
 
 ##############################################################################
-################################## Multipart ##################################
+################################## Multipart #################################
 ##############################################################################
 
 
@@ -176,8 +177,10 @@ class MultipartParser(object):
         self.mem_limit = min(mem_limit, self.disk_limit)
         self.buffer_size = min(buffer_size, self.mem_limit)
         self.charset = charset
+
         if self.buffer_size - 6 < len(boundary):  # "--boundary--\r\n"
             raise MultipartError("Boundary does not fit into buffer_size.")
+
         self._done = []
         self._part_iter = None
 
@@ -185,8 +188,10 @@ class MultipartParser(object):
         """ Iterate over the parts of the multipart message. """
         if not self._part_iter:
             self._part_iter = self._iterparse()
+
         for part in self._done:
             yield part
+
         for part in self._part_iter:
             self._done.append(part)
             yield part
@@ -200,6 +205,7 @@ class MultipartParser(object):
         for part in self:
             if name == part.name:
                 return part
+
         return default
 
     def get_all(self, name):
@@ -219,11 +225,13 @@ class MultipartParser(object):
         _bnl = _bcrnl[1:]
         _bempty = _bcrnl[:0]  # b'rn'[:0] -> b''
         buffer = _bempty  # buffer for the last (partial) line
-        while 1:
+
+        while True:
             data = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
             maxread -= len(data)
             lines = (buffer + data).splitlines(True)
             len_first_line = len(lines[0])
+
             # be sure that the first line does not become too big
             if len_first_line > self.buffer_size:
                 # at the same time don't split a '\r\n' accidentally
@@ -232,9 +240,11 @@ class MultipartParser(object):
                 else:
                     splitpos = self.buffer_size
                 lines[:1] = [lines[0][:splitpos], lines[0][splitpos:]]
+
             if data:
                 buffer = lines[-1]
                 lines = lines[:-1]
+
             for line in lines:
                 if line.endswith(_bcrnl):
                     yield line[:-2], _bcrnl
@@ -244,6 +254,7 @@ class MultipartParser(object):
                     yield line[:-1], _bcr
                 else:
                     yield line, _bempty
+
             if not data:
                 break
 
@@ -251,42 +262,54 @@ class MultipartParser(object):
         lines, line = self._lineiter(), ""
         separator = tob("--") + tob(self.boundary)
         terminator = tob("--") + tob(self.boundary) + tob("--")
+
         # Consume first boundary. Ignore leading blank lines
         for line, nl in lines:
             if line:
                 break
+
         if line != separator:
             raise MultipartError("Stream does not start with boundary")
+
         # For each part in stream...
         mem_used, disk_used = 0, 0  # Track used resources to prevent DoS
         is_tail = False  # True if the last line was incomplete (cutted)
+
         opts = {
             "buffer_size": self.buffer_size,
             "memfile_limit": self.memfile_limit,
             "charset": self.charset,
         }
+
         part = MultipartPart(**opts)
+
         for line, nl in lines:
             if line == terminator and not is_tail:
                 part.file.seek(0)
                 yield part
                 break
+
             elif line == separator and not is_tail:
                 if part.is_buffered():
                     mem_used += part.size
                 else:
                     disk_used += part.size
                 part.file.seek(0)
+
                 yield part
+
                 part = MultipartPart(**opts)
+
             else:
                 is_tail = not nl  # The next line continues this one
                 part.feed(line, nl)
+
                 if part.is_buffered():
                     if part.size + mem_used > self.mem_limit:
                         raise MultipartError("Memory limit reached.")
                 elif part.size + disk_used > self.disk_limit:
                     raise MultipartError("Disk limit reached.")
+
         if line != terminator:
             raise MultipartError("Unexpected end of multipart stream.")
 
@@ -306,31 +329,40 @@ class MultipartPart(object):
     def feed(self, line, nl=""):
         if self.file:
             return self.write_body(line, nl)
+
         return self.write_header(line, nl)
 
     def write_header(self, line, nl):
         line = line.decode(self.charset or "latin1")
+
         if not nl:
             raise MultipartError("Unexpected end of line in header.")
+
         if not line.strip():  # blank line -> end of header segment
             self.finish_header()
+
         elif line[0] in " \t" and self.headerlist:
             name, value = self.headerlist.pop()
             self.headerlist.append((name, value + line.strip()))
+
         else:
             if ":" not in line:
                 raise MultipartError("Syntax error in header: No colon.")
+
             name, value = line.split(":", 1)
             self.headerlist.append((name.strip(), value.strip()))
 
     def write_body(self, line, nl):
         if not line and not nl:
             return  # This does not even flush the buffer
+
         self.size += len(line) + len(self._buf)
         self.file.write(self._buf + line)
         self._buf = nl
+
         if self.content_length > 0 and self.size > self.content_length:
             raise MultipartError("Size of body exceeds Content-Length header.")
+
         if self.size > self.memfile_limit and isinstance(self.file, BytesIO):
             # TODO: What about non-file uploads that exceed the memfile_limit?
             self.file, old = TemporaryFile(mode="w+b"), self.file
@@ -343,8 +375,10 @@ class MultipartPart(object):
         cdis = self.headers.get("Content-Disposition", "")
         ctype = self.headers.get("Content-Type", "")
         clen = self.headers.get("Content-Length", "-1")
+
         if not cdis:
             raise MultipartError("Content-Disposition header is missing.")
+
         self.disposition, self.options = parse_options_header(cdis)
         self.name = self.options.get("name")
         self.filename = self.options.get("filename")
@@ -391,7 +425,7 @@ class MultipartPart(object):
 ##############################################################################
 
 
-def parse_form_data(environ, charset="utf8", strict=False, **kw):
+def parse_form_data(environ, charset="utf8", strict=False, **kw)args:
     """ Parse form data from an environ dict and return a (forms, files) tuple.
         Both tuple values are dictionaries with the form-field name as a key
         (unicode) and lists as values (multiple values per key are possible).
@@ -407,25 +441,32 @@ def parse_form_data(environ, charset="utf8", strict=False, **kw):
     """
 
     forms, files = MultiDict(), MultiDict()
+
     try:
         if environ.get("REQUEST_METHOD", "GET").upper() not in ("POST", "PUT"):
             raise MultipartError("Request method other than POST or PUT.")
         content_length = int(environ.get("CONTENT_LENGTH", "-1"))
         content_type = environ.get("CONTENT_TYPE", "")
+
         if not content_type:
             raise MultipartError("Missing Content-Type header.")
+
         content_type, options = parse_options_header(content_type)
         stream = environ.get("wsgi.input") or BytesIO()
         kw["charset"] = charset = options.get("charset", charset)
+
         if content_type == "multipart/form-data":
             boundary = options.get("boundary", "")
+
             if not boundary:
                 raise MultipartError("No boundary for multipart/form-data.")
-            for part in MultipartParser(stream, boundary, content_length, **kw):
+
+            for part in MultipartParser(stream, boundary, content_length, **kwargs):
                 if part.filename or not part.is_buffered():
                     files[part.name] = part
                 else:  # TODO: Big form-fields are in the files dict. really?
                     forms[part.name] = part.value
+
         elif content_type in (
             "application/x-www-form-urlencoded",
             "application/x-url-encoded",
@@ -433,15 +474,20 @@ def parse_form_data(environ, charset="utf8", strict=False, **kw):
             mem_limit = kw.get("mem_limit", 2 ** 20)
             if content_length > mem_limit:
                 raise MultipartError("Request too big. Increase MAXMEM.")
+
             data = stream.read(mem_limit).decode(charset)
+
             if stream.read(1):  # These is more that does not fit mem_limit
                 raise MultipartError("Request too big. Increase MAXMEM.")
+
             data = parse_qs(data, keep_blank_values=True)
+
             for key, values in data.iteritems():
                 for value in values:
                     forms[key] = value
         else:
             raise MultipartError("Unsupported content type.")
+
     except MultipartError:
         if strict:
             raise
