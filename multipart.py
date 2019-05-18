@@ -36,7 +36,11 @@ from collections import MutableMapping as DictMixin
 
 
 class MultiDict(DictMixin):
-    """ A dict that remembers old values for each key """
+    """ A dict that remembers old values for each key.
+        HTTP headers may repeat with differing values,
+        such as Set-Cookie. We need to remember all
+        values.
+    """
 
     def __init__(self, *args, **kwargs):
         self.dict = dict()
