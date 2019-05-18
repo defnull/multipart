@@ -10,32 +10,29 @@ cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
 
 
 __author__ = "Marcel Hellkamp"
-__version__ = "0.1"
+__version__ = "0.2"
 __license__ = "MIT"
+__all__ = ["MultipartError", "MultipartParser", "MultipartPart", "parse_form_data"]
 
+
+import re
+import sys
+from io import BytesIO
 from tempfile import TemporaryFile
+from urllib.parse import parse_qs
 from wsgiref.headers import Headers
-import re, sys
+from collections import MutableMapping as DictMixin
 
-try:
-    from urlparse import parse_qs
-except ImportError:  # pragma: no cover (fallback for Python 2.5)
-    from cgi import parse_qs
-
-try:
-    from io import BytesIO
-except ImportError:  # pragma: no cover (fallback for Python 2.5)
-    from StringIO import StringIO as BytesIO
 
 ##############################################################################
-################################ Helper & Misc ################################
+################################ Helper & Misc ###############################
 ##############################################################################
 # Some of these were copied from bottle: http://bottle.paws.de/
 
-try:
-    from collections import MutableMapping as DictMixin
-except ImportError:  # pragma: no cover (fallback for Python 2.5)
-    from UserDict import DictMixin
+
+# ---------
+# MultiDict
+# ---------
 
 
 class MultiDict(DictMixin):
@@ -43,7 +40,7 @@ class MultiDict(DictMixin):
 
     def __init__(self, *args, **kwargs):
         self.dict = dict()
-        for k, v in dict(*args, **kwargs).iteritems():
+        for k, v in dict(*args, **kwargs).items():
             self[k] = v
 
     def __len__(self):
@@ -79,36 +76,41 @@ class MultiDict(DictMixin):
     def get(self, key, default=None, index=-1):
         if key not in self.dict and default != KeyError:
             return [default][index]
+
         return self.dict[key][index]
 
     def iterallitems(self):
-        for key, values in self.dict.iteritems():
+        for key, values in self.dict.items():
             for value in values:
                 yield key, value
 
 
-def to_bytes(data, enc="utf8"):  # Convert strings to bytes (py2 and py3)
-    if sys.version_info[0] > 2:
-        if isinstance(data, str):
-            data = data.encode(enc)
+def to_bytes(data, enc="utf8"):
+    if isinstance(data, str):
+        data = data.encode(enc)
+
     return data
 
 
 def copy_file(stream, target, maxread=-1, buffer_size=2 * 16):
     """ Read from :stream and write to :target until :maxread or EOF. """
     size, read = 0, stream.read
+
     while True:
         to_read = buffer_size if maxread < 0 else min(buffer_size, maxread - size)
         part = read(to_read)
+
         if not part:
             return size
+
         target.write(part)
         size += len(part)
 
 
-##############################################################################
-################################ Header Parser ###############################
-##############################################################################
+# -------------
+# Header Parser
+# -------------
+
 
 _special = re.escape('()<>@,;:\\"/[]?={} \t')
 _re_special = re.compile("[%s]" % _special)
@@ -121,27 +123,34 @@ _re_option = re.compile(_option)  # key=value part of an Content-Type like heade
 def header_quote(val):
     if not _re_special.search(val):
         return val
+
     return '"' + val.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def header_unquote(val, filename=False):
     if val[0] == val[-1] == '"':
         val = val[1:-1]
+
         if val[1:3] == ":\\" or val[:2] == "\\\\":
             val = val.split("\\")[-1]  # fix ie6 bug: full path --> filename
+
         return val.replace("\\\\", "\\").replace('\\"', '"')
+
     return val
 
 
 def parse_options_header(header, options=None):
     if ";" not in header:
         return header.lower().strip(), {}
+
     content_type, tail = header.split(";", 1)
     options = options or {}
+
     for match in _re_option.finditer(tail):
         key = match.group(1).lower()
         value = header_unquote(match.group(2), key == "filename")
         options[key] = value
+
     return content_type, options
 
 
@@ -201,7 +210,7 @@ class MultipartParser(object):
 
     def parts(self):
         """ Returns a list with all parts of the multipart message. """
-        return list(iter(self))
+        return list(self)
 
     def get(self, name, default=None):
         """ Return the first part with that name or a default value (None). """
@@ -223,10 +232,10 @@ class MultipartParser(object):
         """
         read = self.stream.read
         maxread, maxbuf = self.content_length, self.buffer_size
-        _bcrnl = to_bytes("\r\n")
-        _bcr = _bcrnl[:1]
-        _bnl = _bcrnl[1:]
-        _bempty = _bcrnl[:0]  # b'rn'[:0] -> b''
+        _bcrnl = b"\r\n"
+        _bcr = b"\r"
+        _bnl = b"\n"
+        _bempty = b""
         buffer = _bempty  # buffer for the last (partial) line
 
         while True:
@@ -251,10 +260,13 @@ class MultipartParser(object):
             for line in lines:
                 if line.endswith(_bcrnl):
                     yield line[:-2], _bcrnl
+
                 elif line.endswith(_bnl):
                     yield line[:-1], _bnl
+
                 elif line.endswith(_bcr):
                     yield line[:-1], _bcr
+
                 else:
                     yield line, _bempty
 
@@ -263,8 +275,8 @@ class MultipartParser(object):
 
     def _iterparse(self):
         lines, line = self._lineiter(), ""
-        separator = to_bytes("--") + to_bytes(self.boundary)
-        terminator = to_bytes("--") + to_bytes(self.boundary) + to_bytes("--")
+        separator = b"--" + to_bytes(self.boundary)
+        terminator = b"--" + to_bytes(self.boundary) + b"--"
 
         # Consume first boundary. Ignore leading blank lines
         for line, nl in lines:
@@ -324,7 +336,7 @@ class MultipartPart(object):
         self.headers = None
         self.file = False
         self.size = 0
-        self._buf = to_bytes("")
+        self._buf = b""
         self.disposition, self.name, self.filename = None, None, None
         self.content_type, self.charset = None, charset
         self.memfile_limit = memfile_limit
@@ -404,22 +416,26 @@ class MultipartPart(object):
         """ Data without decoding """
         pos = self.file.tell()
         self.file.seek(0)
+
         try:
             val = self.file.read()
         except IOError:
             raise
         finally:
             self.file.seek(pos)
+
         return val
 
     def save_as(self, path):
         fp = open(path, "wb")
         pos = self.file.tell()
+
         try:
             self.file.seek(0)
             size = copy_file(self.file, fp)
         finally:
             self.file.seek(pos)
+
         return size
 
 
@@ -456,7 +472,7 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
         content_type, options = parse_options_header(content_type)
         stream = environ.get("wsgi.input") or BytesIO()
-        kw["charset"] = charset = options.get("charset", charset)
+        kwargs["charset"] = charset = options.get("charset", charset)
 
         if content_type == "multipart/form-data":
             boundary = options.get("boundary", "")
@@ -474,7 +490,7 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
             "application/x-www-form-urlencoded",
             "application/x-url-encoded",
         ):
-            mem_limit = kw.get("mem_limit", 2 ** 20)
+            mem_limit = kwargs.get("mem_limit", 2 ** 20)
             if content_length > mem_limit:
                 raise MultipartError("Request too big. Increase MAXMEM.")
 
@@ -485,7 +501,7 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
             data = parse_qs(data, keep_blank_values=True)
 
-            for key, values in data.iteritems():
+            for key, values in data.items():
                 for value in values:
                     forms[key] = value
         else:
@@ -494,4 +510,5 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
     except MultipartError:
         if strict:
             raise
+
     return forms, files

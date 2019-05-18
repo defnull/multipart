@@ -2,7 +2,7 @@
 import unittest
 import sys, os.path, tempfile
 import multipart as mp
-from multipart import tob
+from multipart import to_bytes
 import base64
 try:
     from io import BytesIO
@@ -45,49 +45,49 @@ class TestMultipartParser(unittest.TestCase):
     def test_line_parser(self):
         for line in ('foo',''):
             for ending in ('\n','\r','\r\n'):
-                i = mp.MultipartParser(BytesIO(tob(line+ending)), 'foo')
-                i = i._lineiter().next()
-                self.assertEqual(i, (tob(line), tob(ending)))
+                i = mp.MultipartParser(BytesIO(to_bytes(line+ending)), 'foo')
+                i = next(i._lineiter())
+                self.assertEqual(i, (to_bytes(line), to_bytes(ending)))
 
     def test_iterlines(self):
         data = 'abc\ndef\r\nghi'
-        result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('ghi'),tob(''))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo')._lineiter()
+        result = [(to_bytes('abc'),to_bytes('\n')),(to_bytes('def'),to_bytes('\r\n')),(to_bytes('ghi'),to_bytes(''))]
+        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo')._lineiter()
         self.assertEqual(list(i), result)
-    
+
     def test_iterlines_limit(self):
         data, limit = 'abc\ndef\r\nghi', 10
-        result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r\n')),(tob('g'),tob(''))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', limit)._lineiter()
+        result = [(to_bytes('abc'),to_bytes('\n')),(to_bytes('def'),to_bytes('\r\n')),(to_bytes('g'),to_bytes(''))]
+        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', limit)._lineiter()
         self.assertEqual(list(i), result)
         data, limit = 'abc\ndef\r\nghi', 8
-        result = [(tob('abc'),tob('\n')),(tob('def'),tob('\r'))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', limit)._lineiter()
+        result = [(to_bytes('abc'),to_bytes('\n')),(to_bytes('def'),to_bytes('\r'))]
+        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', limit)._lineiter()
         self.assertEqual(list(i), result)
 
     def test_iterlines_maxbuf(self):
         data, limit = 'abcdefgh\nijklmnop\r\nq', 9
-        result = [(tob('abcdefgh'),tob('\n')),(tob('ijklmnop'),tob('')),(tob(''),tob('\r\n')),(tob('q'),tob(''))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
+        result = [(to_bytes('abcdefgh'),to_bytes('\n')),(to_bytes('ijklmnop'),to_bytes('')),(to_bytes(''),to_bytes('\r\n')),(to_bytes('q'),to_bytes(''))]
+        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', buffer_size=limit)._lineiter()
         self.assertEqual(list(i), result)
         data, limit = ('X'*3*1024)+'x\n', 1024
-        result = [(tob('X'*1024),tob('')),(tob('X'*1024),tob('')),(tob('X'*1024),tob('')),(tob('x'),tob('\n'))]
-        i = mp.MultipartParser(BytesIO(tob(data)), 'foo', buffer_size=limit)._lineiter()
+        result = [(to_bytes('X'*1024),to_bytes('')),(to_bytes('X'*1024),to_bytes('')),(to_bytes('X'*1024),to_bytes('')),(to_bytes('x'),to_bytes('\n'))]
+        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', buffer_size=limit)._lineiter()
         self.assertEqual(list(i), result)
 
     def test_copyfile(self):
-        source = BytesIO(tob('abc'))
+        source = BytesIO(to_bytes('abc'))
         target = BytesIO()
         self.assertEqual(mp.copy_file(source, target), 3)
         target.seek(0)
-        self.assertEqual(target.read(), tob('abc'))
+        self.assertEqual(target.read(), to_bytes('abc'))
 
     def test_big_file(self):
         ''' If the size of an uploaded part exceeds memfile_limit,
             it is written to disk. '''
         test_file = 'abc'*1024
         boundary = '---------------------------186454651713519341951581030105'
-        request = BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(to_bytes('\r\n').join(map(to_bytes,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary,
@@ -96,51 +96,51 @@ class TestMultipartParser(unittest.TestCase):
         'Content-Disposition: form-data; name="file3"; filename="random.png"',
         'Content-Type: image/png', '', test_file*2, '--'+boundary+'--',''])))
         p = mp.MultipartParser(request, boundary, memfile_limit=len(test_file))
-        self.assertEqual(p.get('file1').file.read(), tob(test_file))
+        self.assertEqual(p.get('file1').file.read(), to_bytes(test_file))
         self.assertTrue(p.get('file1').is_buffered())
-        self.assertEqual(p.get('file2').file.read(), tob(test_file + 'a'))
+        self.assertEqual(p.get('file2').file.read(), to_bytes(test_file + 'a'))
         self.assertFalse(p.get('file2').is_buffered())
-        self.assertEqual(p.get('file3').file.read(), tob(test_file*2))
+        self.assertEqual(p.get('file3').file.read(), to_bytes(test_file*2))
         self.assertFalse(p.get('file3').is_buffered())
 
     def test_get_all(self):
         ''' Test the get() and get_all() methods. '''
         boundary = '---------------------------186454651713519341951581030105'
-        request = BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(to_bytes('\r\n').join(map(to_bytes,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', 'abc'*1024, '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', 'def'*1024, '--' + boundary + '--',''])))
         p = mp.MultipartParser(request, boundary)
-        self.assertEqual(p.get('file1').file.read(), tob('abc'*1024))
+        self.assertEqual(p.get('file1').file.read(), to_bytes('abc'*1024))
         self.assertEqual(p.get('file2'), None)
         self.assertEqual(len(p.get_all('file1')), 2)
-        self.assertEqual(p.get_all('file1')[1].file.read(), tob('def'*1024))
+        self.assertEqual(p.get_all('file1')[1].file.read(), to_bytes('def'*1024))
         self.assertEqual(p.get_all('file1'), p.parts())
 
     def test_file_seek(self):
         ''' The file object should be readable withoud a seek(0). '''
         test_file = 'abc'*1024
         boundary = '---------------------------186454651713519341951581030105'
-        request = BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(to_bytes('\r\n').join(map(to_bytes,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
         p = mp.MultipartParser(request, boundary)
-        self.assertEqual(p.get('file1').file.read(), tob(test_file))
+        self.assertEqual(p.get('file1').file.read(), to_bytes(test_file))
         self.assertEqual(p.get('file1').value, test_file)
 
     def test_unicode_value(self):
         ''' The .value property always returns unicode '''
         test_file = 'abc'*1024
         boundary = '---------------------------186454651713519341951581030105'
-        request = BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(to_bytes('\r\n').join(map(to_bytes,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
         p = mp.MultipartParser(request, boundary)
-        self.assertEqual(p.get('file1').file.read(), tob(test_file))
+        self.assertEqual(p.get('file1').file.read(), to_bytes(test_file))
         self.assertEqual(p.get('file1').value, test_file)
         self.assertTrue(hasattr(p.get('file1').value, 'encode'))
 
@@ -155,25 +155,25 @@ class TestMultipartParser(unittest.TestCase):
             return fname
         test_file = 'abc'*1024
         boundary = '---------------------------186454651713519341951581030105'
-        request = BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(to_bytes('\r\n').join(map(to_bytes,[
         '--' + boundary,
         'Content-Disposition: form-data; name="file1"; filename="random.png"',
         'Content-Type: image/png', '', test_file, '--' + boundary + '--',''])))
         p = mp.MultipartParser(request, boundary)
-        self.assertEqual(p.get('file1').file.read(1024), tob(test_file)[:1024])
+        self.assertEqual(p.get('file1').file.read(1024), to_bytes(test_file)[:1024])
         tfn = tmp_file_name()
         p.get('file1').save_as(tfn)
         tf = open(tfn, 'rb')
-        self.assertEqual(tf.read(), tob(test_file))
+        self.assertEqual(tf.read(), to_bytes(test_file))
         tf.close()
-        self.assertEqual(p.get('file1').file.read(), tob(test_file)[1024:])
+        self.assertEqual(p.get('file1').file.read(), to_bytes(test_file)[1024:])
 
     def test_multiline_header(self):
         ''' HTTP allows headers to be multiline. '''
-        test_file = tob('abc'*1024)
+        test_file = to_bytes('abc'*1024)
         test_text = u'Test text\n with\r\n ümläuts!'
         boundary = '---------------------------186454651713519341951581030105'
-        request = BytesIO(tob('\r\n').join(map(tob,[
+        request = BytesIO(to_bytes('\r\n').join(map(to_bytes,[
         '--' + boundary,
         'Content-Disposition: form-data;',
         '\tname="file1"; filename="random.png"',
@@ -196,8 +196,8 @@ class TestFormParser(unittest.TestCase):
 
     def write(self, *lines):
         for line in lines:
-            self.data.write(tob(line))
-    
+            self.data.write(to_bytes(line))
+
     def parse(self, *lines, **kwargs):
         self.write(*lines)
         self.data.seek(0)
@@ -205,7 +205,7 @@ class TestFormParser(unittest.TestCase):
         kwargs['strict'] = True
         kwargs['charset'] = 'utf8'
         return mp.parse_form_data(**kwargs)
-    
+
     def test_multipart(self):
        forms, files = self.parse('--foo\r\n',
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
@@ -213,7 +213,7 @@ class TestFormParser(unittest.TestCase):
                    'Content-Disposition: form-data; name="text1"\r\n', '\r\n',
                    'abc\r\n', '--foo--')
        self.assertEqual(forms['text1'], 'abc')
-       self.assertEqual(files['file1'].file.read(), tob('abc'))
+       self.assertEqual(files['file1'].file.read(), to_bytes('abc'))
        self.assertEqual(files['file1'].filename, 'random.png')
        self.assertEqual(files['file1'].name, 'file1')
        self.assertEqual(files['file1'].content_type, 'image/png')
@@ -236,7 +236,7 @@ class TestBrokenMultipart(unittest.TestCase):
 
     def write(self, *lines):
         for line in lines:
-            self.data.write(tob(line))
+            self.data.write(to_bytes(line))
 
     def parse(self, *lines, **kwargs):
         self.write(*lines)
@@ -295,7 +295,7 @@ class TestBrokenMultipart(unittest.TestCase):
                    'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
         self.assertEqual(len(files), 1)
-        self.assertTrue(tob('name="file2"') in files['file1'].file.read())
+        self.assertTrue(to_bytes('name="file2"') in files['file1'].file.read())
 
     def test_no_start_boundary(self):
         self.write('--bar\r\n','--foo\r\n'
@@ -353,7 +353,7 @@ class TestBrokenMultipart(unittest.TestCase):
     under BSD licence. See http://werkzeug.pocoo.org/ '''
 
 browser_test_cases = {}
-browser_test_cases['firefox3-2png1txt'] = {'data': base64.b64decode(tob('''
+browser_test_cases['firefox3-2png1txt'] = {'data': base64.b64decode(to_bytes('''
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xODY0NTQ2NTE3MTM1MTkzNDE5NTE1ODEwMzAx
 MDUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZTEiOyBmaWxlbmFt
 ZT0iYW5jaG9yLnBuZyINCkNvbnRlbnQtVHlwZTogaW1hZ2UvcG5nDQoNColQTkcNChoKAAAADUlI
@@ -386,7 +386,7 @@ MTkzNDE5NTE1ODEwMzAxMDUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0i
 dGV4dCINCg0KZXhhbXBsZSB0ZXh0DQotLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLTE4NjQ1
 NDY1MTcxMzUxOTM0MTk1MTU4MTAzMDEwNS0tDQo=''')),
 'boundary':'---------------------------186454651713519341951581030105',
-'files': {'file1': (u'anchor.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': (u'anchor.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAGdSURBVDjLpVMxa8JAFL6rAQUHXQoZpLU/
 oUOnDtKtW/MDBFHHThUKTgrqICgOEtd2EVxb2qFkKTgVChbSCnZTiVBEMBRLiEmafleCDaWxDX3w
@@ -397,7 +397,7 @@ b2cymbG7gnK5vIX9USwWI1yAI/KjLGK7teEI8HN1TizrnZWdRxxsNps8vI3YLpVKbB2EWB6XkMHz
 gAlvriYRSW+app1Mpy/jSCRSRSyDUON5nuJGytaAHI/vVPv9p/FischivL96gEP2bGxorhVFqYXD
 YQFCScwBYa9EKU1OlAkB+QLEU2AGaJ7PWKlUDiF2BBw4P9Mt/KUoije+5uAv9gGcjD6Kg4wu3AAA
 AABJRU5ErkJggg=='''))),
-          'file2': (u'application_edit.png', 'image/png', base64.b64decode(tob('''
+          'file2': (u'application_edit.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJRSURBVBgZpcHda81xHMDx9+d3fudYzuYw
 2RaZ5yTWolEiuZpCSjGJFEktUUr8A6ZxQZGHmDtqdrGUXHgoeZqSp1F2bLFWjtkOB8PZzvmd7+dj
@@ -413,7 +413,7 @@ Z1FwaFe9j+d4eecaPd1dPxNTSlfWHm1v5y/EzBitblXp4JLZ5f6yBbOwaK5tsD+9c33jq/f8w2+m
 RSjOllPhkAAAAABJRU5ErkJggg==''')))},
 'forms': {'text': u'example text'}}
 
-browser_test_cases['firefox3-2pnglongtext'] = {'data': base64.b64decode(tob('''
+browser_test_cases['firefox3-2pnglongtext'] = {'data': base64.b64decode(to_bytes('''
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcxMTc0
 OA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlMSI7IGZpbGVuYW1l
 PSJhY2NlcHQucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhE
@@ -451,7 +451,7 @@ MTc0OA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJ0ZXh0Ig0KDQotLWxv
 bmcgdGV4dA0KLS13aXRoIGJvdW5kYXJ5DQotLWxvb2thbGlrZXMtLQ0KLS0tLS0tLS0tLS0tLS0t
 LS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcxMTc0OC0tDQo=''')),
 'boundary':'---------------------------14904044739787191031754711748',
-'files': {'file1': (u'accept.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': (u'accept.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAKfSURBVDjLpZPrS1NhHMf9O3bOdmwDCWRE
 IYKEUHsVJBI7mg3FvCxL09290jZj2EyLMnJexkgpLbPUanNOberU5taUMnHZUULMvelCtWF0sW/n
@@ -466,7 +466,7 @@ UT0hh9p9EnXT5Vh6t4C22QaUDh6HwnECOmcO7K+6kW49DKqS2DrEZCtfuI+9GrNHg4fMHVSO5kE7
 nAPVkAxKBxcOzsajpS4Yh4ohUPPWKTUh3PaQEptIOr6BiJjcZXCwktaAGfrRIpwblqOV3YKdhfXO
 IvBLeREWpnd8ynsaSJoyESFphwTtfjN6X1jRO2+FxWtCWksqBApeiFIR9K6fiTpPiigDoadqCEag
 5YUFKl6Yrciw0VOlhOivv/Ff8wtn0KzlebrUYwAAAABJRU5ErkJggg=='''))),
-          'file2': (u'add.png', 'image/png', base64.b64decode(tob('''
+          'file2': (u'add.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJvSURBVDjLpZPrS5NhGIf9W7YvBYOkhlko
 qCklWChv2WyKik7blnNris72bi6dus0DLZ0TDxW1odtopDs4D8MDZuLU0kXq61CijSIIasOvv94V
@@ -482,7 +482,7 @@ ahscNCy0cMBWsSI0TCQcZc5ALkEYckL5A5noWSBhfm2AecMAjbcRWV0pUTh0HE64TNf0mczcnnQy
 u/MilaFJCae1nw2fbz1DnVOxyGTlKeZft/Ff8x1BRssfACjTwQAAAABJRU5ErkJggg==''')))},
 'forms': {'text': u'--long text\r\n--with boundary\r\n--lookalikes--'}}
 
-browser_test_cases['opera8-2png1txt'] = {'data': base64.b64decode(tob('''
+browser_test_cases['opera8-2png1txt'] = {'data': base64.b64decode(to_bytes('''
 LS0tLS0tLS0tLS0tekVPOWpRS21MYzJDcTg4YzIzRHgxOQ0KQ29udGVudC1EaXNwb3NpdGlvbjog
 Zm9ybS1kYXRhOyBuYW1lPSJmaWxlMSI7IGZpbGVuYW1lPSJhcnJvd19icmFuY2gucG5nIg0KQ29u
 dGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9h
@@ -515,7 +515,7 @@ rkJggg0KLS0tLS0tLS0tLS0tekVPOWpRS21MYzJDcTg4YzIzRHgxOQ0KQ29udGVudC1EaXNwb3Np
 dGlvbjogZm9ybS1kYXRhOyBuYW1lPSJ0ZXh0Ig0KDQpibGFmYXNlbCDDtsOkw7wNCi0tLS0tLS0t
 LS0tLXpFTzlqUUttTGMyQ3E4OGMyM0R4MTktLQ0K''')),
 'boundary':'----------zEO9jQKmLc2Cq88c23Dx19',
-'files': {'file1': (u'arrow_branch.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': (u'arrow_branch.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAHYSURBVDjLlVLPS1RxHJynpVu7KEn0Vt+2
 l6IO5qGCIsIwCPwD6hTUaSk6REoUHeoQ0qVAMrp0COpY0SUIPVRgSl7ScCUTst6zIoqg0y7lvpnP
@@ -527,7 +527,7 @@ jYjSYuncngtdhakbM5dXlhgTNEMYLqB9q49MKgsPjTBXntVgkDNIgmI1VY2Q7QzgJ9rx++ci3ofz
 iBYiiELQEUAyhB/D29M3Zy+uIkDIhGYvgeKvIkbHxz6Tevzq6ut+ANh9fldetMn80OzZVVdgLFjB
 Q0tpEz68jcB4ifx3pQeictVXIEETnBPCKMLEwBIZAPJD767V/ETGwsjzYYiC6vzEP9asLo3SGuQv
 AAAAAElFTkSuQmCC'''))),
-          'file2': (u'award_star_bronze_1.png', 'image/png', base64.b64decode(tob('''
+          'file2': (u'award_star_bronze_1.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJvSURBVDjLhZNNSFRRFIC/N++9eWMzhkl/
 ZJqFMQMRFvTvImkXSdKiVRAURBRRW1eZA9EqaNOiFlZEtQxKyrJwUS0K+qEQzaTE/AtLHR3Hmffu
@@ -543,7 +543,7 @@ vHp8s3ziNZ49i1q6HrR1YHGBNnt1dG2Z++gC4TdvrqNkK1eHj7ljQ/ujHx6NyPw8BFIiKPmNpKar
 7P7xb/zyT9P+o7OYvzzYSUt8U+TzxytodixEfgN3CFlQMNAcMgAAAABJRU5ErkJggg==''')))},
 'forms': {'text': u'blafasel öäü'}}
 
-browser_test_cases['webkit3-2png1txt'] = {'data': base64.b64decode(tob('''
+browser_test_cases['webkit3-2png1txt'] = {'data': base64.b64decode(to_bytes('''
 LS0tLS0tV2ViS2l0Rm9ybUJvdW5kYXJ5amRTRmhjQVJrOGZ5R055Ng0KQ29udGVudC1EaXNwb3Np
 dGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlMSI7IGZpbGVuYW1lPSJndGstYXBwbHkucG5nIg0K
 Q29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACN
@@ -588,7 +588,7 @@ b250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9InRleHQiDQoNCnRoaXMgaXMgYW5v
 dGhlciB0ZXh0IHdpdGggw7xtbMOkw7x0cw0KLS0tLS0tV2ViS2l0Rm9ybUJvdW5kYXJ5amRTRmhj
 QVJrOGZ5R055Ni0tDQo=''')),
 'boundary':'----WebKitFormBoundaryjdSFhcARk8fyGNy6',
-'files': {'file1': (u'gtk-apply.png', 'image/png', base64.b64decode(tob('''
+'files': {'file1': (u'gtk-apply.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAAN1wAADdcBQiibeAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAANnSURB
 VDiNldJ9aJVVHAfw7znPuS/PvW4405WbLWfbsBuNbramq5Tp7mLqIFPXINlwpAitaCAPjWKgBdXz
@@ -607,7 +607,7 @@ zW63+8BLzzX6H1lSSrtjBzFpRPBkZi0mrk3Z7Z2tP5xqMiruhP0PTKL5EqMnSgKr87eUvSqPGf3I
 psux53CDpie0QFjhf90NhBDiVlJ1LaqmcqXq2l/7aU7826E94rWjQb3iXbYXgAzAC8ADwI1//zF1
 OkQIAUIIBSAlc6tfpkjr52XTj4SFi937eP3MmDAB2I5YyaT63AmyuVDHmAAQt0FOzARg/aeGhBCS
 3EjnCBygMwKAnXL+AdDkiZ/xYgR3AAAAAElFTkSuQmCC'''))),
-          'file2': (u'gtk-no.png', 'image/png', base64.b64decode(tob('''
+          'file2': (u'gtk-no.png', 'image/png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAAN1wAADdcBQiibeAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAM1SURB
 VDiNrZTPaxtHFMc/M7uzs7KobckyDjQxtoPbnlJyMBRKgsGFHkwvvfbuU/+BQCilBHrof+BT7zmV
@@ -627,7 +627,7 @@ RVF6LlJ/DN88gybwAvj3JWAOnQZqQOUjuHcTPpiH931YAhjC38/gj3/glz34GQiBc+BMRJKXlnx9
 KKWc3CmFLCN/JyMuQ+ASuJIJwH8C25TmkHULEgAAAABJRU5ErkJggg==''')))},
 'forms': {'text': u'this is another text with ümläüts'}}
 
-browser_test_cases['ie6-2png1txt'] = {'data': base64.b64decode(tob('''
+browser_test_cases['ie6-2png1txt'] = {'data': base64.b64decode(to_bytes('''
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS03ZDkxYjAzYTIwMTI4DQpDb250ZW50LURpc3Bv
 c2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImZpbGUxIjsgZmlsZW5hbWU9IkM6XFB5dGhvbjI1XHd6
 dGVzdFx3ZXJremV1Zy1tYWluXHRlc3RzXG11bHRpcGFydFxmaXJlZm94My0ycG5nMXR4dFxmaWxl
@@ -661,7 +661,7 @@ LS0tLS0tLS0tLS0tLS0tLS0tLS0tLTdkOTFiMDNhMjAxMjgNCkNvbnRlbnQtRGlzcG9zaXRpb246
 IGZvcm0tZGF0YTsgbmFtZT0idGV4dCINCg0KaWU2IHN1Y2tzIDotLw0KLS0tLS0tLS0tLS0tLS0t
 LS0tLS0tLS0tLS0tLS03ZDkxYjAzYTIwMTI4LS0NCg==''')),
 'boundary':'---------------------------7d91b03a20128',
-'files': {'file1': (u'file1.png', 'image/x-png', base64.b64decode(tob('''
+'files': {'file1': (u'file1.png', 'image/x-png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAGdSURBVDjLpVMxa8JAFL6rAQUHXQoZpLU/
 oUOnDtKtW/MDBFHHThUKTgrqICgOEtd2EVxb2qFkKTgVChbSCnZTiVBEMBRLiEmafleCDaWxDX3w
@@ -672,7 +672,7 @@ b2cymbG7gnK5vIX9USwWI1yAI/KjLGK7teEI8HN1TizrnZWdRxxsNps8vI3YLpVKbB2EWB6XkMHz
 gAlvriYRSW+app1Mpy/jSCRSRSyDUON5nuJGytaAHI/vVPv9p/FischivL96gEP2bGxorhVFqYXD
 YQFCScwBYa9EKU1OlAkB+QLEU2AGaJ7PWKlUDiF2BBw4P9Mt/KUoije+5uAv9gGcjD6Kg4wu3AAA
 AABJRU5ErkJggg=='''))),
-          'file2': (u'file2.png', 'image/x-png', base64.b64decode(tob('''
+          'file2': (u'file2.png', 'image/x-png', base64.b64decode(to_bytes('''
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJRSURBVBgZpcHda81xHMDx9+d3fudYzuYw
 2RaZ5yTWolEiuZpCSjGJFEktUUr8A6ZxQZGHmDtqdrGUXHgoeZqSp1F2bLFWjtkOB8PZzvmd7+dj
@@ -703,6 +703,6 @@ class TestWerkzeugExamples(unittest.TestCase):
                 self.assertEqual(rfiles[field].name, field)
                 self.assertEqual(rfiles[field].filename, files[field][0])
                 self.assertEqual(rfiles[field].content_type, files[field][1])
-                self.assertEqual(rfiles[field].file.read(), tob(files[field][2]))
+                self.assertEqual(rfiles[field].file.read(), to_bytes(files[field][2]))
             for field in forms:
                 self.assertEqual(rforms[field], forms[field])
