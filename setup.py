@@ -2,17 +2,7 @@
 
 import sys
 import os.path
-from distutils.core import setup
-
-if sys.version_info < (2, 5):
-    raise NotImplementedError(
-        "Sorry, you need at least Python 2.5 or Python 3.x to use this module."
-    )
-
-try:
-    from distutils.command.build_py import build_py_2to3 as build_py
-except ImportError:
-    from distutils.command.build_py import build_py
+from setuptools import setup
 
 from multipart import __version__, __author__, __license__, __doc__
 
@@ -40,5 +30,4 @@ setup(
         "Programming Language :: Python :: 2.5",
         "Programming Language :: Python :: 3",
     ],
-    cmdclass={"build_py": build_py},
 )
