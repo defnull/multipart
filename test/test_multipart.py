@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 import unittest
-import sys, os.path, tempfile
-import multipart as mp
-from multipart import to_bytes
 import base64
+import sys, os.path, tempfile
+
+from io import BytesIO
+
 try:
-    from io import BytesIO
-except ImportError:
-    from StringIO import StringIO as BytesIO
+    import multipart as mp
+except ModuleNotFoundError:
+    raise SystemExit("multipart not resolveable. Try 'python setup.py develop'.")
+
+from multipart import to_bytes
 
 #TODO: bufsize=10, line=1234567890--boundary\n
 #TODO: bufsize < len(boundary) (should not be possible)

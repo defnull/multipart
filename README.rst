@@ -37,6 +37,12 @@ Limitations
 
 * The size of headers are not counted against the in-memory limit.
 
+Testing
+-------
+
+Tests require `coverage`.
+`pip install coverage`
+
 Todo
 ----
 

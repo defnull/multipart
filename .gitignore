@@ -2,9 +2,14 @@ MANIFEST
 __pycache__/
 *.pyc
 
+# tests
+test.run
+html/
+
 # pytest
 /.cache/
 /.pytest_cache/
 
 #env
 env/
+
