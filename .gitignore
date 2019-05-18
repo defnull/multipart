@@ -8,11 +8,3 @@ __pycache__/
 
 #env
 env/
-
-# setuptools
-/asks.egg-info/
-/build/
-/dist/
-
-# docs
-/docs/build/
