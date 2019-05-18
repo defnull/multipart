@@ -87,8 +87,11 @@ class MultiDict(DictMixin):
                 yield key, value
 
 
-def tob(data, enc="utf8"):  # Convert strings to bytes (py2 and py3)
-    return data.encode(enc) if isinstance(data, unicode) else data
+def to_bytes(data, enc="utf8"):  # Convert strings to bytes (py2 and py3)
+    if sys.version_info[0] > 2:
+        if isinstance(data, str):
+            data = data.encode(enc)
+    return data
 
 
 def copy_file(stream, target, maxread=-1, buffer_size=2 * 16):
@@ -109,8 +112,8 @@ def copy_file(stream, target, maxread=-1, buffer_size=2 * 16):
 
 _special = re.escape('()<>@,;:\\"/[]?={} \t')
 _re_special = re.compile("[%s]" % _special)
-_qstr = '"(?:\\\\.|[^"])*"'  # Quoted string
-_value = "(?:[^%s]+|%s)" % (_special, _qstr)  # Save or quoted string
+_quoted_string = '"(?:\\\\.|[^"])*"'  # Quoted string
+_value = "(?:[^%s]+|%s)" % (_special, _quoted_string)  # Save or quoted string
 _option = "(?:;|^)\s*([^%s]+)\s*=\s*(%s)" % (_special, _value)
 _re_option = re.compile(_option)  # key=value part of an Content-Type like header
 
@@ -220,7 +223,7 @@ class MultipartParser(object):
         """
         read = self.stream.read
         maxread, maxbuf = self.content_length, self.buffer_size
-        _bcrnl = tob("\r\n")
+        _bcrnl = to_bytes("\r\n")
         _bcr = _bcrnl[:1]
         _bnl = _bcrnl[1:]
         _bempty = _bcrnl[:0]  # b'rn'[:0] -> b''
@@ -260,8 +263,8 @@ class MultipartParser(object):
 
     def _iterparse(self):
         lines, line = self._lineiter(), ""
-        separator = tob("--") + tob(self.boundary)
-        terminator = tob("--") + tob(self.boundary) + tob("--")
+        separator = to_bytes("--") + to_bytes(self.boundary)
+        terminator = to_bytes("--") + to_bytes(self.boundary) + to_bytes("--")
 
         # Consume first boundary. Ignore leading blank lines
         for line, nl in lines:
@@ -307,6 +310,7 @@ class MultipartParser(object):
                 if part.is_buffered():
                     if part.size + mem_used > self.mem_limit:
                         raise MultipartError("Memory limit reached.")
+
                 elif part.size + disk_used > self.disk_limit:
                     raise MultipartError("Disk limit reached.")
 
@@ -320,7 +324,7 @@ class MultipartPart(object):
         self.headers = None
         self.file = False
         self.size = 0
-        self._buf = tob("")
+        self._buf = to_bytes("")
         self.disposition, self.name, self.filename = None, None, None
         self.content_type, self.charset = None, charset
         self.memfile_limit = memfile_limit
@@ -425,7 +429,7 @@ class MultipartPart(object):
 ##############################################################################
 
 
-def parse_form_data(environ, charset="utf8", strict=False, **kw)args:
+def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
     """ Parse form data from an environ dict and return a (forms, files) tuple.
         Both tuple values are dictionaries with the form-field name as a key
         (unicode) and lists as values (multiple values per key are possible).
