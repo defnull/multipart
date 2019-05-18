@@ -136,13 +136,13 @@ def header_unquote(val, filename=False):
 def parse_options_header(header, options=None):
     if ";" not in header:
         return header.lower().strip(), {}
-    ctype, tail = header.split(";", 1)
+    content_type, tail = header.split(";", 1)
     options = options or {}
     for match in _re_option.finditer(tail):
         key = match.group(1).lower()
         value = header_unquote(match.group(2), key == "filename")
         options[key] = value
-    return ctype, options
+    return content_type, options
 
 
 ##############################################################################
@@ -376,17 +376,16 @@ class MultipartPart(object):
     def finish_header(self):
         self.file = BytesIO()
         self.headers = Headers(self.headerlist)
-        cdis = self.headers.get("Content-Disposition", "")
-        ctype = self.headers.get("Content-Type", "")
-        clen = self.headers.get("Content-Length", "-1")
+        content_disposition = self.headers.get("Content-Disposition", "")
+        content_type = self.headers.get("Content-Type", "")
 
-        if not cdis:
+        if not content_disposition:
             raise MultipartError("Content-Disposition header is missing.")
 
-        self.disposition, self.options = parse_options_header(cdis)
+        self.disposition, self.options = parse_options_header(content_disposition)
         self.name = self.options.get("name")
         self.filename = self.options.get("filename")
-        self.content_type, options = parse_options_header(ctype)
+        self.content_type, options = parse_options_header(content_type)
         self.charset = options.get("charset") or self.charset
         self.content_length = int(self.headers.get("Content-Length", "-1"))
 
