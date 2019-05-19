@@ -22,7 +22,7 @@ Limitations
 
 * Only parses ``multipart/form-data`` as seen from actual browsers.
 
-* Not suitable as a general purpose multipart parser (e.g. for multipart emails).
+  * Not suitable as a general purpose multipart parser (e.g. for multipart emails).
   * No ``multipart/mixed`` support (RFC 2388, deprecated in RFC 7578)
   * No ``encoded-word`` encoding (RFC 2047).
   * No ``base64`` or ``quoted-printable`` transfer encoding.
