@@ -27,7 +27,6 @@ setup(
         "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
         "Topic :: Internet :: WWW/HTTP :: WSGI :: Middleware",
         "Topic :: Internet :: WWW/HTTP :: WSGI :: Server",
-        "Programming Language :: Python :: 2.5",
         "Programming Language :: Python :: 3",
     ],
 )
