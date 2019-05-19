@@ -21,10 +21,12 @@ Limitations
 -----------
 
 * Only parses ``multipart/form-data`` as seen from actual browsers.
-  * Not suitable as a general purpose multipart parser (e.g. for multipart emails).
+
+* Not suitable as a general purpose multipart parser (e.g. for multipart emails).
   * No ``multipart/mixed`` support (RFC 2388, deprecated in RFC 7578)
   * No ``encoded-word`` encoding (RFC 2047).
   * No ``base64`` or ``quoted-printable`` transfer encoding.
+  
 * Part headers are expected to be encoded in the charset given to the ``Multipart``/``MultipartParser`` constructor.
   [For operability considerations, see RFC 7578, section 5.1.]
 * The size of headers are not counted against the in-memory limit (todo).
