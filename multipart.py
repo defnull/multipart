@@ -319,7 +319,6 @@ class MultipartParser(object):
                 if part.is_buffered():
                     if part.size + mem_used > self.mem_limit:
                         raise MultipartError("Memory limit reached.")
-
                 elif part.size + disk_used > self.disk_limit:
                     raise MultipartError("Disk limit reached.")
 
@@ -353,11 +352,9 @@ class MultipartPart(object):
 
         if not line.strip():  # blank line -> end of header segment
             self.finish_header()
-
         elif line[0] in " \t" and self.headerlist:
             name, value = self.headerlist.pop()
             self.headerlist.append((name, value + line.strip()))
-
         else:
             if ":" not in line:
                 raise MultipartError("Syntax error in header: No colon.")
