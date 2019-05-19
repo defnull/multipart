@@ -186,7 +186,8 @@ class MultipartParser(object):
             :param boundary: The multipart boundary as a byte string.
             :param content_length: The maximum number of bytes to read.
         """
-        self.stream, self.boundary = stream, boundary
+        self.stream = stream
+        self.boundary = boundary
         self.content_length = content_length
         self.disk_limit = disk_limit
         self.memfile_limit = memfile_limit
@@ -333,8 +334,11 @@ class MultipartPart(object):
         self.file = False
         self.size = 0
         self._buf = b""
-        self.disposition, self.name, self.filename = None, None, None
-        self.content_type, self.charset = None, charset
+        self.disposition = None
+        self.name = None
+        self.filename = None
+        self.content_type = None
+        self.charset = charset
         self.memfile_limit = memfile_limit
         self.buffer_size = buffer_size
 
