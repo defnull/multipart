@@ -345,7 +345,7 @@ class MultipartPart(object):
         return self.write_header(line, nl)
 
     def write_header(self, line, nl):
-        line = line.decode(self.charset or "latin1")
+        line = line.decode(self.charset)
 
         if not nl:
             raise MultipartError("Unexpected end of line in header.")
