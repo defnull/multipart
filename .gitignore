@@ -1,15 +1,16 @@
 MANIFEST
 __pycache__/
 *.pyc
+/build/
+/dist/
+/*.egg-info
 
 # tests
 test.run
 html/
-
-# pytest
 /.cache/
 /.pytest_cache/
+/.venv
 
 #env
 env/
-
