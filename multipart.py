@@ -236,11 +236,7 @@ class MultipartParser(object):
         """
         read = self.stream.read
         maxread, maxbuf = self.content_length, self.buffer_size
-        _bcrnl = b"\r\n"
-        _bcr = b"\r"
-        _bnl = b"\n"
-        _bempty = b""
-        buffer = _bempty  # buffer for the last (partial) line
+        buffer = b""  # buffer for the last (partial) line
 
         while True:
             data = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
@@ -251,7 +247,7 @@ class MultipartParser(object):
             # be sure that the first line does not become too big
             if len_first_line > self.buffer_size:
                 # at the same time don't split a '\r\n' accidentally
-                if len_first_line == self.buffer_size + 1 and lines[0].endswith(_bcrnl):
+                if len_first_line == self.buffer_size + 1 and lines[0].endswith(b"\r\n"):
                     splitpos = self.buffer_size - 1
                 else:
                     splitpos = self.buffer_size
@@ -262,17 +258,14 @@ class MultipartParser(object):
                 lines = lines[:-1]
 
             for line in lines:
-                if line.endswith(_bcrnl):
-                    yield line[:-2], _bcrnl
-
-                elif line.endswith(_bnl):
-                    yield line[:-1], _bnl
-
-                elif line.endswith(_bcr):
-                    yield line[:-1], _bcr
-
+                if line.endswith(b"\r\n"):
+                    yield line[:-2], b"\r\n"
+                elif line.endswith(b"\n"):
+                    yield line[:-1], b"\n"
+                elif line.endswith(b"\r"):
+                    yield line[:-1], b"\r"
                 else:
-                    yield line, _bempty
+                    yield line, b""
 
             if not data:
                 break
