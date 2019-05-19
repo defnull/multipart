@@ -12,5 +12,9 @@ html/
 /.pytest_cache/
 /.venv
 
+# coverage
+.coverage
+/htmlcov
+
 #env
 env/
