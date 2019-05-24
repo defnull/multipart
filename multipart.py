@@ -207,10 +207,12 @@ class MultipartParser(object):
             self._part_iter = self._iterparse()
 
         for part in self._done:
+            assign_data_type(part)
             yield part
 
         for part in self._part_iter:
             self._done.append(part)
+            assign_data_type(part)
             yield part
 
     def parts(self):
@@ -298,7 +300,9 @@ class MultipartParser(object):
 
         for line, nl in lines:
             if line == terminator and not is_tail:
-                part.file.seek(0)
+                part.data.seek(0)
+
+                assign_data_type(part)
                 yield part
                 break
 
@@ -307,8 +311,9 @@ class MultipartParser(object):
                     mem_used += part.size
                 else:
                     disk_used += part.size
-                part.file.seek(0)
+                part.data.seek(0)
 
+                assign_data_type(part)
                 yield part
 
                 part = MultipartPart(**opts)
@@ -331,7 +336,9 @@ class MultipartPart(object):
     def __init__(self, buffer_size=2 ** 16, memfile_limit=2 ** 18, charset="latin1"):
         self.headerlist = []
         self.headers = None
+        self.data = None
         self.file = False
+        self.form_data = False
         self.size = 0
         self._buf = b""
         self.disposition = None
@@ -343,7 +350,7 @@ class MultipartPart(object):
         self.buffer_size = buffer_size
 
     def feed(self, line, nl=""):
-        if self.file:
+        if self.data:
             return self.write_body(line, nl)
 
         return self.write_header(line, nl)
@@ -371,20 +378,20 @@ class MultipartPart(object):
             return  # This does not even flush the buffer
 
         self.size += len(line) + len(self._buf)
-        self.file.write(self._buf + line)
+        self.data.write(self._buf + line)
         self._buf = nl
 
         if self.content_length > 0 and self.size > self.content_length:
             raise MultipartError("Size of body exceeds Content-Length header.")
 
-        if self.size > self.memfile_limit and isinstance(self.file, BytesIO):
+        if self.size > self.memfile_limit and isinstance(self.data, BytesIO):
             # TODO: What about non-file uploads that exceed the memfile_limit?
-            self.file, old = TemporaryFile(mode="w+b"), self.file
+            self.data, old = TemporaryFile(mode="w+b"), self.data
             old.seek(0)
-            copy_file(old, self.file, self.size, self.buffer_size)
+            copy_file(old, self.data, self.size, self.buffer_size)
 
     def finish_header(self):
-        self.file = BytesIO()
+        self.data = BytesIO()
         self.headers = Headers(self.headerlist)
         content_disposition = self.headers.get("Content-Disposition", "")
         content_type = self.headers.get("Content-Type", "")
@@ -401,7 +408,7 @@ class MultipartPart(object):
 
     def is_buffered(self):
         """ Return true if the data is fully buffered in memory."""
-        return isinstance(self.file, BytesIO)
+        return isinstance(self.data, BytesIO)
 
     @property
     def value(self):
@@ -412,30 +419,38 @@ class MultipartPart(object):
     @property
     def raw(self):
         """ Data without decoding """
-        pos = self.file.tell()
-        self.file.seek(0)
+        pos = self.data.tell()
+        self.data.seek(0)
 
         try:
-            val = self.file.read()
+            val = self.data.read()
         except IOError:
             raise
         finally:
-            self.file.seek(pos)
+            self.data.seek(pos)
 
         return val
 
     def save_as(self, path):
         fp = open(path, "wb")
-        pos = self.file.tell()
+        pos = self.data.tell()
 
         try:
-            self.file.seek(0)
-            size = copy_file(self.file, fp)
+            self.data.seek(0)
+            size = copy_file(self.data, fp)
         finally:
-            self.file.seek(pos)
+            self.data.seek(pos)
 
         return size
 
+
+# utils
+
+def assign_data_type(part: MultipartPart) -> None:
+    if part.filename is not None:
+        part.file = True
+    else:
+        part.form_data = True
 
 ##############################################################################
 #################################### WSGI ####################################
