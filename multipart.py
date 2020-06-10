@@ -283,7 +283,7 @@ class MultipartParser(object):
 
         # Check for empty data
         if line == terminator:
-            for line, nl in lines:
+            for _ in lines:
                 raise MultipartError("Data after end of stream")
             return
 

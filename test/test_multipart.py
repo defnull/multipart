@@ -221,6 +221,11 @@ class TestFormParser(unittest.TestCase):
        self.assertEqual(files['file1'].name, 'file1')
        self.assertEqual(files['file1'].content_type, 'image/png')
 
+    def test_empty(self):
+        forms, files = self.parse('--foo--\r\n')
+        self.assertEqual(0, len(forms))
+        self.assertEqual(0, len(files))
+
     def test_urlencoded(self):
        for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
            self.env['CONTENT_TYPE'] = ctype
