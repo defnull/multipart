@@ -34,7 +34,10 @@ Limitations
 Changelog
 ---------
 
-* **0.2 (in development)**
+* **0.2.1 (13.06.2020)**
+  * Fix #20 empty payload
+
+* **0.2 (19.03.2019)**
   * Dropped support for Python versions below 3.6. Stay on 0.1 if you need Python 2.5+ support.
 
 * **0.1 (21.06.2010)**
