@@ -18,7 +18,7 @@ __all__ = ["MultipartError", "MultipartParser", "MultipartPart", "parse_form_dat
 import re
 import sys
 from io import BytesIO
-from tempfile import TemporaryFile
+from tempfile import NamedTemporaryFile
 from urllib.parse import parse_qs
 from wsgiref.headers import Headers
 from collections import MutableMapping as DictMixin
@@ -385,7 +385,7 @@ class MultipartPart(object):
 
         if self.size > self.memfile_limit and isinstance(self.file, BytesIO):
             # TODO: What about non-file uploads that exceed the memfile_limit?
-            self.file, old = TemporaryFile(mode="w+b"), self.file
+            self.file, old = NamedTemporaryFile(mode="w+b"), self.file
             old.seek(0)
             copy_file(old, self.file, self.size, self.buffer_size)
 

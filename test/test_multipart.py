@@ -103,8 +103,10 @@ class TestMultipartParser(unittest.TestCase):
         self.assertTrue(p.get('file1').is_buffered())
         self.assertEqual(p.get('file2').file.read(), to_bytes(test_file + 'a'))
         self.assertFalse(p.get('file2').is_buffered())
+        self.assertIsInstance(p.get('file2').file.name, str)
         self.assertEqual(p.get('file3').file.read(), to_bytes(test_file*2))
         self.assertFalse(p.get('file3').is_buffered())
+        self.assertIsInstance(p.get('file3').file.name, str)
 
     def test_get_all(self):
         ''' Test the get() and get_all() methods. '''
