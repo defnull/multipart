@@ -321,13 +321,17 @@ class MultipartParser(object):
 
             else:
                 is_tail = not nl  # The next line continues this one
-                part.feed(line, nl)
+                try:
+                    part.feed(line, nl)
 
-                if part.is_buffered():
-                    if part.size + mem_used > self.mem_limit:
-                        raise MultipartError("Memory limit reached.")
-                elif part.size + disk_used > self.disk_limit:
-                    raise MultipartError("Disk limit reached.")
+                    if part.is_buffered():
+                        if part.size + mem_used > self.mem_limit:
+                            raise MultipartError("Memory limit reached.")
+                    elif part.size + disk_used > self.disk_limit:
+                        raise MultipartError("Disk limit reached.")
+                except MultipartError:
+                    part.close()
+                    raise
 
         if line != terminator:
             raise MultipartError("Unexpected end of multipart stream.")
@@ -431,16 +435,21 @@ class MultipartPart(object):
         return val
 
     def save_as(self, path):
-        fp = open(path, "wb")
-        pos = self.file.tell()
+        with open(path, "wb") as fp:
+            pos = self.file.tell()
 
-        try:
-            self.file.seek(0)
-            size = copy_file(self.file, fp)
-        finally:
-            self.file.seek(pos)
+            try:
+                self.file.seek(0)
+                size = copy_file(self.file, fp)
+            finally:
+                self.file.seek(pos)
 
         return size
+
+    def close(self):
+        if self.file:
+            self.file.close()
+            self.file = False
 
 
 ##############################################################################
@@ -513,6 +522,8 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
     except MultipartError:
         if strict:
+            for part in files.values():
+                part.close()
             raise
 
     return forms, files
