@@ -10,7 +10,7 @@ cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
 
 
 __author__ = "Marcel Hellkamp"
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __license__ = "MIT"
 __all__ = ["MultipartError", "MultipartParser", "MultipartPart", "parse_form_data"]
 

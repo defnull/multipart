@@ -34,6 +34,9 @@ Limitations
 Changelog
 ---------
 
+* **0.2.2 (04.09.2020)**
+  * Fix #21 ResourceWarnings on Python 3
+
 * **0.2.1 (13.06.2020)**
   * Fix #20 empty payload
 
