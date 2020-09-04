@@ -99,12 +99,16 @@ class TestMultipartParser(unittest.TestCase):
         'Content-Disposition: form-data; name="file3"; filename="random.png"',
         'Content-Type: image/png', '', test_file*2, '--'+boundary+'--',''])))
         p = mp.MultipartParser(request, boundary, memfile_limit=len(test_file))
-        self.assertEqual(p.get('file1').file.read(), to_bytes(test_file))
-        self.assertTrue(p.get('file1').is_buffered())
-        self.assertEqual(p.get('file2').file.read(), to_bytes(test_file + 'a'))
-        self.assertFalse(p.get('file2').is_buffered())
-        self.assertEqual(p.get('file3').file.read(), to_bytes(test_file*2))
-        self.assertFalse(p.get('file3').is_buffered())
+        try:
+            self.assertEqual(p.get('file1').file.read(), to_bytes(test_file))
+            self.assertTrue(p.get('file1').is_buffered())
+            self.assertEqual(p.get('file2').file.read(), to_bytes(test_file + 'a'))
+            self.assertFalse(p.get('file2').is_buffered())
+            self.assertEqual(p.get('file3').file.read(), to_bytes(test_file*2))
+            self.assertFalse(p.get('file3').is_buffered())
+        finally:
+            for part in p:
+                part.close()
 
     def test_get_all(self):
         ''' Test the get() and get_all() methods. '''
