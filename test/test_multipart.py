@@ -305,10 +305,19 @@ class TestBrokenMultipart(unittest.TestCase):
         self.assertEqual(len(files), 1)
         self.assertTrue(to_bytes('name="file2"') in files['file1'].file.read())
 
-    def test_no_start_boundary(self):
-        self.write('--bar\r\n','--foo\r\n'
+    def test_preamble_before_start_boundary(self):
+        forms, files = self.parse('Preamble\r\n', '--foo\r\n'
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
+        self.assertEqual(files['file1'].file.read(), to_bytes('abc'))
+        self.assertEqual(files['file1'].filename, 'random.png')
+        self.assertEqual(files['file1'].name, 'file1')
+        self.assertEqual(files['file1'].content_type, 'image/png')
+
+    def test_no_start_boundary(self):
+        self.write('--bar\r\n','--nonsense\r\n'
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--nonsense--')
         self.assertMPError()
 
     def test_disk_limit(self):
