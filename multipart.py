@@ -276,19 +276,19 @@ class MultipartParser(object):
         separator = b"--" + to_bytes(self.boundary)
         terminator = b"--" + to_bytes(self.boundary) + b"--"
 
-        # Consume first boundary. Ignore leading blank lines
+        # Consume first boundary. Ignore any preamble, as required by RFC
+        # 2046, section 5.1.1.
         for line, nl in lines:
-            if line:
+            if line in (separator, terminator):
                 break
+        else:
+            raise MultipartError("Stream does not contain boundary")
 
         # Check for empty data
         if line == terminator:
             for _ in lines:
                 raise MultipartError("Data after end of stream")
             return
-
-        if line != separator:
-            raise MultipartError("Stream does not start with boundary")
 
         # For each part in stream...
         mem_used, disk_used = 0, 0  # Track used resources to prevent DoS
