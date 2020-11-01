@@ -21,7 +21,7 @@ from io import BytesIO
 from tempfile import TemporaryFile
 from urllib.parse import parse_qs
 from wsgiref.headers import Headers
-from collections import MutableMapping as DictMixin
+from collections.abc import MutableMapping as DictMixin
 
 
 ##############################################################################
