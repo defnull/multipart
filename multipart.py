@@ -332,6 +332,11 @@ class MultipartParser(object):
                 except MultipartError:
                     part.close()
                     raise
+        else:
+            # If we run off the end of the loop, the current MultipartPart
+            # will not have been yielded, so it's our responsibility to
+            # close it.
+            part.close()
 
         if line != terminator:
             raise MultipartError("Unexpected end of multipart stream.")
