@@ -34,7 +34,7 @@ Licence (MIT)
 '''
 
 __author__ = 'Marcel Hellkamp'
-__version__ = '0.1'
+__version__ = '0.1.1'
 __license__ = 'MIT'
 
 from tempfile import TemporaryFile

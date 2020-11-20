@@ -55,3 +55,11 @@ Licence (MIT)
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 
+Changelog
+---------
+
+* **0.1.1 (20.11.2020)**
+  * Allow stream to contain data before first boundary (#28)
+
+* **0.1 (21.06.2010)**
+  * First release
