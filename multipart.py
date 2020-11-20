@@ -236,11 +236,13 @@ class MultipartParser(object):
         lines, line = self._lineiter(), ''
         separator = tob('--') + tob(self.boundary)
         terminator = tob('--') + tob(self.boundary) + tob('--')
-        # Consume first boundary. Ignore leading blank lines
+        # Consume first boundary. Ignore any preamble, as required by RFC
+        # 2046, section 5.1.1.
         for line, nl in lines:
-            if line: break
-        if line != separator:
-            raise MultipartError("Stream does not start with boundary")
+            if line in (separator, terminator):
+                break
+        else:
+            raise MultipartError("Stream does not contain boundary")
         # For each part in stream...
         mem_used, disk_used = 0, 0 # Track used resources to prevent DoS
         is_tail = False # True if the last line was incomplete (cutted)
