@@ -34,6 +34,11 @@ Limitations
 Changelog
 ---------
 
+* **0.2.3 (20.11.2020)**
+  * Import MutableMapping from collections.abc (#23)
+  * Fix a few more ResourceWarnings in the test suite (#24)
+  * Allow stream to contain data before first boundary (#25)
+
 * **0.2.2 (04.09.2020)**
   * Fix #21 ResourceWarnings on Python 3
 
