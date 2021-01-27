@@ -517,7 +517,7 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
             if stream.read(1):  # These is more that does not fit mem_limit
                 raise MultipartError("Request too big. Increase MAXMEM.")
 
-            data = parse_qs(data, keep_blank_values=True)
+            data = parse_qs(data, keep_blank_values=True, encoding=charset)
 
             for key, values in data.items():
                 for value in values:

@@ -210,7 +210,7 @@ class TestFormParser(unittest.TestCase):
         self.data.seek(0)
         kwargs['environ'] = self.env
         kwargs['strict'] = True
-        kwargs['charset'] = 'utf8'
+        kwargs.setdefault('charset', 'utf8')
         return mp.parse_form_data(**kwargs)
 
     def test_multipart(self):
@@ -231,12 +231,26 @@ class TestFormParser(unittest.TestCase):
         self.assertEqual(0, len(files))
 
     def test_urlencoded(self):
-       for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
-           self.env['CONTENT_TYPE'] = ctype
-           forms, files = self.parse('a=b&c=d;e=f')
-           self.assertEqual(forms['a'], 'b')
-           self.assertEqual(forms['c'], 'd')
-           self.assertEqual(forms['e'], 'f')
+        for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
+            self.env['CONTENT_TYPE'] = ctype
+            forms, files = self.parse('a=b&c=d;e=f')
+            self.assertEqual(forms['a'], 'b')
+            self.assertEqual(forms['c'], 'd')
+            self.assertEqual(forms['e'], 'f')
+
+    def test_urlencoded_latin1(self):
+        for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
+            self.env['CONTENT_TYPE'] = ctype
+            forms, files = self.parse(b'a=\xe0\xe1&e=%E8%E9', charset='iso-8859-1')
+            self.assertEqual(forms['a'], 'àá')
+            self.assertEqual(forms['e'], 'èé')
+
+    def test_urlencoded_utf8(self):
+        for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
+            self.env['CONTENT_TYPE'] = ctype
+            forms, files = self.parse(b'a=\xc6\x80\xe2\x99\xad&e=%E1%B8%9F%E2%99%AE')
+            self.assertEqual(forms['a'], 'ƀ♭')
+            self.assertEqual(forms['e'], 'ḟ♮')
 
 
 class TestBrokenMultipart(unittest.TestCase):
