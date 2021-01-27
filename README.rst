@@ -34,6 +34,9 @@ Limitations
 Changelog
 ---------
 
+* **0.2.4 (27.01.2021)**
+  * Consistently decode non-utf8 URL-encoded form-data
+
 * **0.2.3 (20.11.2020)**
   * Import MutableMapping from collections.abc (#23)
   * Fix a few more ResourceWarnings in the test suite (#24)
