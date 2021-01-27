@@ -3,7 +3,7 @@ Parser for multipart/form-data
 
 This module provides a parser for the multipart/form-data format. It can read
 from a file, a socket or a WSGI environment. The parser can be used to replace
-cgi.FieldStorage (without the bugs) and works with Python 2.5+ and 3.x (2to3).
+cgi.FieldStorage to work around its limitations.
 
 Features
 --------
