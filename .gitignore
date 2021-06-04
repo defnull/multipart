@@ -11,6 +11,7 @@ html/
 /.cache/
 /.pytest_cache/
 /.venv
+/.tox
 
 # coverage
 .coverage

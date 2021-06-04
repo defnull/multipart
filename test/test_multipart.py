@@ -372,15 +372,20 @@ class TestBrokenMultipart(unittest.TestCase):
         self.assertMPError()
 
     def test_big_urlencoded_detect_early(self):
-       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
-       self.env['CONTENT_LENGTH'] = 1024+2
-       self.write('a='+'b'*1024)
-       self.assertMPError(mem_limit=1024)
+        self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+        self.env['CONTENT_LENGTH'] = 1024+2
+        self.write('a='+'b'*1024)
+        self.assertMPError(mem_limit=1024)
 
     def test_big_urlencoded_detect_late(self):
-       self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
-       self.write('a='+'b'*1024)
-       self.assertMPError(mem_limit=1024)
+        self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+        self.write('a='+'b'*1024)
+        self.assertMPError(mem_limit=1024)
+
+    def test_bad_content_length(self):
+        self.env['CONTENT_LENGTH'] = ""
+        self.write('a=123')
+        self.assertMPError()
 
 
 ''' The files used by the following test were taken from the werkzeug library

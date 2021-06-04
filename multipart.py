@@ -412,7 +412,7 @@ class MultipartPart(object):
         self.filename = self.options.get("filename")
         self.content_type, options = parse_options_header(content_type)
         self.charset = options.get("charset") or self.charset
-        self.content_length = int(self.headers.get("Content-Length", "-1"))
+        self.content_length = int(self.headers.get("Content-Length") or "-1")
 
     def is_buffered(self):
         """ Return true if the data is fully buffered in memory."""
@@ -482,11 +482,11 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
     try:
         if environ.get("REQUEST_METHOD", "GET").upper() not in ("POST", "PUT"):
             raise MultipartError("Request method other than POST or PUT.")
-        content_length = int(environ.get("CONTENT_LENGTH", "-1"))
         content_type = environ.get("CONTENT_TYPE", "")
-
         if not content_type:
             raise MultipartError("Missing Content-Type header.")
+
+        content_length = int(environ.get("CONTENT_LENGTH") or "-1")
 
         content_type, options = parse_options_header(content_type)
         stream = environ.get("wsgi.input") or BytesIO()

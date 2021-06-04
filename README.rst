@@ -34,6 +34,9 @@ Limitations
 Changelog
 ---------
 
+* unreleased
+  * Gracefully handle CONTENT_LENGTH == ""
+
 * **0.2.4 (27.01.2021)**
   * Consistently decode non-utf8 URL-encoded form-data
 
