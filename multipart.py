@@ -400,13 +400,13 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
             mem_limit = kw.get('mem_limit', 2**20)
             if content_length > mem_limit:
                 raise MultipartError("Request to big. Increase MAXMEM.")
-            data = stream.read(mem_limit).decode(charset)
+            data = stream.read(mem_limit)
             if stream.read(1): # These is more that does not fit mem_limit
                 raise MultipartError("Request to big. Increase MAXMEM.")
             data = parse_qs(data, keep_blank_values=True)
             for key, values in data.iteritems():
                 for value in values:
-                    forms[key] = value
+                    forms[key] = value.decode(charset)
         else:
             raise MultipartError("Unsupported content type.")
     except MultipartError:
