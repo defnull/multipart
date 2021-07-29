@@ -236,9 +236,10 @@ class TestFormParser(unittest.TestCase):
     def test_urlencoded_utf8(self):
         for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
             self.env['CONTENT_TYPE'] = ctype
-            forms, files = self.parse(b'a=\xc6\x80\xe2\x99\xad&e=%E1%B8%9F%E2%99%AE')
-            self.assertEqual(forms['a'], u'ƀ♭')
-            self.assertEqual(forms['e'], u'ḟ♮')
+            forms, files = self.parse(
+                b'\xce\xb1=\xc6\x80\xe2\x99\xad&%CE%B5=%E1%B8%9F%E2%99%AE')
+            self.assertEqual(forms[u'α'], u'ƀ♭')
+            self.assertEqual(forms[u'ε'], u'ḟ♮')
 
 
 class TestBrokenMultipart(unittest.TestCase):

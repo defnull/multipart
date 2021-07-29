@@ -406,7 +406,7 @@ def parse_form_data(environ, charset='utf8', strict=False, **kw):
             data = parse_qs(data, keep_blank_values=True)
             for key, values in data.iteritems():
                 for value in values:
-                    forms[key] = value.decode(charset)
+                    forms[key.decode(charset)] = value.decode(charset)
         else:
             raise MultipartError("Unsupported content type.")
     except MultipartError:
