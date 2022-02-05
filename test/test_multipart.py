@@ -233,10 +233,9 @@ class TestFormParser(unittest.TestCase):
     def test_urlencoded(self):
         for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
             self.env['CONTENT_TYPE'] = ctype
-            forms, files = self.parse('a=b&c=d;e=f')
+            forms, files = self.parse('a=b&c=d')
             self.assertEqual(forms['a'], 'b')
             self.assertEqual(forms['c'], 'd')
-            self.assertEqual(forms['e'], 'f')
 
     def test_urlencoded_latin1(self):
         for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
