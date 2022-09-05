@@ -3,6 +3,7 @@ import unittest
 import base64
 import sys, os.path, tempfile
 
+import zlib
 from io import BytesIO
 
 try:
@@ -224,6 +225,20 @@ class TestFormParser(unittest.TestCase):
        self.assertEqual(files['file1'].filename, 'random.png')
        self.assertEqual(files['file1'].name, 'file1')
        self.assertEqual(files['file1'].content_type, 'image/png')
+
+    def test_gzip_encoding(self):
+        test_str = "abc" * 32
+        deflater = zlib.compressobj(wbits=31)  #gzip encoding
+        gzipped_test_str = deflater.compress(test_str)
+        gzipped_test_str += deflater.flush()
+
+        forms, _ = self.parse(
+            '--foo--\r\n'
+            'Content-Encoding: Gzip\r\n',
+            'Content-Disposition: form-data; name="text"\r\n',
+            gzipped_test_str, '\r\n', '--foo--\r\n'
+        )
+        self.assertEqual(forms['text1'], test_str)
 
     def test_empty(self):
         forms, files = self.parse('--foo--\r\n')

@@ -17,6 +17,7 @@ __all__ = ["MultipartError", "MultipartParser", "MultipartPart", "parse_form_dat
 
 import re
 import sys
+import zlib
 from io import BytesIO
 from tempfile import TemporaryFile
 from urllib.parse import parse_qs
@@ -353,9 +354,23 @@ class MultipartPart(object):
         self.name = None
         self.filename = None
         self.content_type = None
+        self.content_encoding = None
         self.charset = charset
         self.memfile_limit = memfile_limit
         self.buffer_size = buffer_size
+
+    @staticmethod
+    def read_gzip(gzip_bytes):
+        """Inflates gzip encoded data and returns it."""
+        inflated_bytes = b""
+        try:
+            gzip_inflater = zlib.decompressobj(31)
+            inflated_bytes = gzip_inflater.decompress(gzip_bytes)
+            inflated_bytes += gzip_inflater.flush()
+        except zlib.error as exc:
+            raise MultipartError("Zlib error raised when attempting to inflate gzipped data: %s" % repr(exc))
+
+        return inflated_bytes
 
     def feed(self, line, nl=""):
         if self.file:
@@ -412,6 +427,7 @@ class MultipartPart(object):
         self.filename = self.options.get("filename")
         self.content_type, options = parse_options_header(content_type)
         self.charset = options.get("charset") or self.charset
+        self.content_encoding = self.headers.get("Content-Encoding", "")
         self.content_length = int(self.headers.get("Content-Length", "-1"))
 
     def is_buffered(self):
@@ -421,8 +437,11 @@ class MultipartPart(object):
     @property
     def value(self):
         """ Data decoded with the specified charset """
+        raw_data = self.raw
+        if self.content_encoding.lower() == "gzip":
+            raw_data = self.read_gzip(raw_data)
 
-        return self.raw.decode(self.charset)
+        return raw_data.decode(self.charset)
 
     @property
     def raw(self):
