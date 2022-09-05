@@ -360,7 +360,7 @@ class MultipartPart(object):
         self.buffer_size = buffer_size
 
     @staticmethod
-    def read_gzip(gzip_bytes):
+    def inflate_gzip_data(gzip_bytes):
         """Inflates gzip encoded data and returns it."""
         inflated_bytes = b""
         try:
@@ -439,7 +439,7 @@ class MultipartPart(object):
         """ Data decoded with the specified charset """
         raw_data = self.raw
         if self.content_encoding.lower() == "gzip":
-            raw_data = self.read_gzip(raw_data)
+            raw_data = self.inflate_gzip_data(raw_data)
 
         return raw_data.decode(self.charset)
 

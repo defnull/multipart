@@ -11,7 +11,7 @@ try:
 except ModuleNotFoundError:
     raise SystemExit("multipart not resolveable. Try 'python setup.py develop'.")
 
-from multipart import to_bytes
+from multipart import to_bytes, MultipartError
 
 #TODO: bufsize=10, line=1234567890--boundary\n
 #TODO: bufsize < len(boundary) (should not be possible)
@@ -228,16 +228,30 @@ class TestFormParser(unittest.TestCase):
 
     def test_gzip_encoding(self):
         test_str = "abc" * 32
-        deflater = zlib.compressobj(wbits=31)  #gzip encoding
+        deflater = zlib.compressobj(wbits=31)  # gzip encoding
         gzipped_test_str = deflater.compress(to_bytes(test_str))
         gzipped_test_str += deflater.flush()
 
-        forms, _ = self.parse('--foo\r\n',
+        forms, _ = self.parse(
+            '--foo\r\n',
             'Content-Disposition: form-data; name="gzippedText"\r\n',
             'Content-Encoding: gzip\r\n', '\r\n',
             gzipped_test_str, '\r\n', '--foo--'
         )
         self.assertEqual(forms["gzippedText"], test_str)
+
+    def test_gzip_multipart_error_raised(self):
+        """Tests that a MultipartError is raised if a zlib error occurs when inflating
+        gzip encoded data.
+        """
+        test_str = "abc" * 32
+        with self.assertRaises(MultipartError):
+            self.parse(
+                '--foo\r\n',
+                'Content-Disposition: form-data; name="gzippedText"\r\n',
+                'Content-Encoding: gzip\r\n', '\r\n',
+                test_str, '\r\n', '--foo--'
+            )
 
     def test_empty(self):
         forms, files = self.parse('--foo--\r\n')
