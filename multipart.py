@@ -96,7 +96,7 @@ def to_bytes(data, enc="utf8"):
     return data
 
 
-def copy_file(stream, target, maxread=-1, buffer_size=2 * 16):
+def copy_file(stream, target, maxread=-1, buffer_size=2 ** 16):
     """ Read from :stream and write to :target until :maxread or EOF. """
     size, read = 0, stream.read
 
