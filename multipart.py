@@ -27,7 +27,7 @@ from collections.abc import MutableMapping as DictMixin
 ##############################################################################
 ################################ Helper & Misc ###############################
 ##############################################################################
-# Some of these were copied from bottle: http://bottle.paws.de/
+# Some of these were copied from bottle: https://bottlepy.org
 
 
 # ---------
