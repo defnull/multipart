@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multipart"
+requires-python = ">=3.5"
+license = {file = "LICENSE"}
+description = "Parser for multipart/form-data"
+readme = "README.rst"
+authors = [
+  {name = "Marcel Hellkamp", email = "marc@gsites.de"},
+]
+
+dynamic = ["version"]
+urls = { repository = "http://github.com/defnull/multipart" }
+
+
+classifiers = [
+    "Development Status :: 6 - Mature",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: CGI Tools/Libraries",
+    "Topic :: Internet :: WWW/HTTP :: WSGI",
+    "Programming Language :: Python :: 3",
+]
+
+[tool.setuptools]
+py-modules = ["multipart"]
+platforms = ["any"]
+
+[tool.setuptools.dynamic]
+version = {attr = "multipart.__version__"}
+
+[tool.coverage.run]
+branch = true
+source = ["multipart", "test"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = ["test"]
