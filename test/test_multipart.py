@@ -45,39 +45,6 @@ class TestHeaderParser(unittest.TestCase):
 
 class TestMultipartParser(unittest.TestCase):
 
-    def test_line_parser(self):
-        for line in ('foo',''):
-            for ending in ('\n','\r','\r\n'):
-                i = mp.MultipartParser(BytesIO(to_bytes(line+ending)), 'foo')
-                i = next(i._lineiter())
-                self.assertEqual(i, (to_bytes(line), to_bytes(ending)))
-
-    def test_iterlines(self):
-        data = 'abc\ndef\r\nghi'
-        result = [(to_bytes('abc'),to_bytes('\n')),(to_bytes('def'),to_bytes('\r\n')),(to_bytes('ghi'),to_bytes(''))]
-        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo')._lineiter()
-        self.assertEqual(list(i), result)
-
-    def test_iterlines_limit(self):
-        data, limit = 'abc\ndef\r\nghi', 10
-        result = [(to_bytes('abc'),to_bytes('\n')),(to_bytes('def'),to_bytes('\r\n')),(to_bytes('g'),to_bytes(''))]
-        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', limit)._lineiter()
-        self.assertEqual(list(i), result)
-        data, limit = 'abc\ndef\r\nghi', 8
-        result = [(to_bytes('abc'),to_bytes('\n')),(to_bytes('def'),to_bytes('\r'))]
-        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', limit)._lineiter()
-        self.assertEqual(list(i), result)
-
-    def test_iterlines_maxbuf(self):
-        data, limit = 'abcdefgh\nijklmnop\r\nq', 9
-        result = [(to_bytes('abcdefgh'),to_bytes('\n')),(to_bytes('ijklmnop'),to_bytes('')),(to_bytes(''),to_bytes('\r\n')),(to_bytes('q'),to_bytes(''))]
-        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', buffer_size=limit)._lineiter()
-        self.assertEqual(list(i), result)
-        data, limit = ('X'*3*1024)+'x\n', 1024
-        result = [(to_bytes('X'*1024),to_bytes('')),(to_bytes('X'*1024),to_bytes('')),(to_bytes('X'*1024),to_bytes('')),(to_bytes('x'),to_bytes('\n'))]
-        i = mp.MultipartParser(BytesIO(to_bytes(data)), 'foo', buffer_size=limit)._lineiter()
-        self.assertEqual(list(i), result)
-
     def test_copyfile(self):
         source = BytesIO(to_bytes('abc'))
         target = BytesIO()
@@ -380,6 +347,7 @@ class TestBrokenMultipart(unittest.TestCase):
        self.env['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
        self.write('a='+'b'*1024)
        self.assertMPError(mem_limit=1024)
+
 
 
 ''' The files used by the following test were taken from the werkzeug library

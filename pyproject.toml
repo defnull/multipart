@@ -42,3 +42,4 @@ source = ["multipart", "test"]
 minversion = "6.0"
 addopts = "-ra -q"
 testpaths = ["test"]
+pythonpath = ["."]
