@@ -12,13 +12,13 @@ cgi.FieldStorage to work around its limitations.
 __author__ = "Marcel Hellkamp"
 __version__ = "0.2.4"
 __license__ = "MIT"
-__all__ = ["MultipartError", "MultipartParser", "MultipartPart", "parse_form_data"]
+__all__ = ["MultipartError", "MultipartParser", "MultipartPart", "AsyncMultipartParser", "MultipartBuffer", "parse_form_data"]
 
 
 import re
-import sys
 from io import BytesIO
 from tempfile import TemporaryFile
+from typing import Iterator, Optional, Union
 from urllib.parse import parse_qs
 from wsgiref.headers import Headers
 from collections.abc import MutableMapping as DictMixin
@@ -229,126 +229,49 @@ class MultipartParser(object):
         """ Return a list of parts with that name. """
         return [p for p in self if p.name == name]
 
-    def _lineiter(self):
-        """ Iterate over a binary file-like object line by line. Each line is
-            returned as a (line, line_ending) tuple. If the line does not fit
-            into self.buffer_size, line_ending is empty and the rest of the line
-            is returned with the next iteration.
-        """
-        read = self.stream.read
-        maxread, maxbuf = self.content_length, self.buffer_size
-        buffer = b""  # buffer for the last (partial) line
-
-        while True:
-            data = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
-            maxread -= len(data)
-            lines = (buffer + data).splitlines(True)
-            len_first_line = len(lines[0])
-
-            # be sure that the first line does not become too big
-            if len_first_line > self.buffer_size:
-                # at the same time don't split a '\r\n' accidentally
-                if len_first_line == self.buffer_size + 1 and lines[0].endswith(b"\r\n"):
-                    splitpos = self.buffer_size - 1
-                else:
-                    splitpos = self.buffer_size
-                lines[:1] = [lines[0][:splitpos], lines[0][splitpos:]]
-
-            if data:
-                buffer = lines[-1]
-                lines = lines[:-1]
-
-            for line in lines:
-                if line.endswith(b"\r\n"):
-                    yield line[:-2], b"\r\n"
-                elif line.endswith(b"\n"):
-                    yield line[:-1], b"\n"
-                elif line.endswith(b"\r"):
-                    yield line[:-1], b"\r"
-                else:
-                    yield line, b""
-
-            if not data:
-                break
-
     def _iterparse(self):
-        lines, line = self._lineiter(), ""
-        separator = b"--" + to_bytes(self.boundary)
-        terminator = b"--" + to_bytes(self.boundary) + b"--"
-
-        # Consume first boundary. Ignore any preamble, as required by RFC
-        # 2046, section 5.1.1.
-        for line, nl in lines:
-            if line in (separator, terminator):
-                break
-        else:
-            raise MultipartError("Stream does not contain boundary")
-
-        # Check for empty data
-        if line == terminator:
-            for _ in lines:
-                raise MultipartError("Data after end of stream")
-            return
-
-        # For each part in stream...
-        mem_used, disk_used = 0, 0  # Track used resources to prevent DoS
-        is_tail = False  # True if the last line was incomplete (cutted)
-
+        read = self.stream.read
+        maxbuf = self.buffer_size
+        mem_used = disk_used = 0
         opts = {
             "buffer_size": self.buffer_size,
             "memfile_limit": self.memfile_limit,
             "charset": self.charset,
         }
 
-        part = MultipartPart(**opts)
+        part = None
 
-        for line, nl in lines:
-            if line == terminator and not is_tail:
-                part.file.seek(0)
-                yield part
-                break
+        with AsyncMultipartParser(self.boundary, self.content_length) as parser:
+            while not parser.end:
+                for chunk in parser.parse(read(maxbuf)):
+                    if not part:
+                        part = MultipartPart(**opts)
+                        part.set_headers(chunk.headerlist)
 
-            elif line == separator and not is_tail:
-                if part.is_buffered():
-                    mem_used += part.size
-                else:
-                    disk_used += part.size
-                part.file.seek(0)
-
-                yield part
-
-                part = MultipartPart(**opts)
-
-            else:
-                is_tail = not nl  # The next line continues this one
-                try:
-                    part.feed(line, nl)
+                    part.write_body(chunk.drain())
 
                     if part.is_buffered():
                         if part.size + mem_used > self.mem_limit:
                             raise MultipartError("Memory limit reached.")
                     elif part.size + disk_used > self.disk_limit:
                         raise MultipartError("Disk limit reached.")
-                except MultipartError:
-                    part.close()
-                    raise
-        else:
-            # If we run off the end of the loop, the current MultipartPart
-            # will not have been yielded, so it's our responsibility to
-            # close it.
-            part.close()
 
-        if line != terminator:
-            raise MultipartError("Unexpected end of multipart stream.")
+                    if chunk.complete:
+                        if part.is_buffered():
+                            mem_used += part.size
+                        else:
+                            disk_used += part.size
+                        part.file.seek(0)
+                        yield part
+                        part = None               
 
 
 class MultipartPart(object):
     def __init__(self, buffer_size=2 ** 16, memfile_limit=2 ** 18, charset="latin1"):
         self.headerlist = []
         self.headers = None
-        self.file = False
+        self.file = BytesIO()
         self.size = 0
-        self._buf = b""
         self.disposition = None
         self.name = None
         self.filename = None
@@ -357,49 +280,8 @@ class MultipartPart(object):
         self.memfile_limit = memfile_limit
         self.buffer_size = buffer_size
 
-    def feed(self, line, nl=""):
-        if self.file:
-            return self.write_body(line, nl)
-
-        return self.write_header(line, nl)
-
-    def write_header(self, line, nl):
-        line = line.decode(self.charset)
-
-        if not nl:
-            raise MultipartError("Unexpected end of line in header.")
-
-        if not line.strip():  # blank line -> end of header segment
-            self.finish_header()
-        elif line[0] in " \t" and self.headerlist:
-            name, value = self.headerlist.pop()
-            self.headerlist.append((name, value + line.strip()))
-        else:
-            if ":" not in line:
-                raise MultipartError("Syntax error in header: No colon.")
-
-            name, value = line.split(":", 1)
-            self.headerlist.append((name.strip(), value.strip()))
-
-    def write_body(self, line, nl):
-        if not line and not nl:
-            return  # This does not even flush the buffer
-
-        self.size += len(line) + len(self._buf)
-        self.file.write(self._buf + line)
-        self._buf = nl
-
-        if self.content_length > 0 and self.size > self.content_length:
-            raise MultipartError("Size of body exceeds Content-Length header.")
-
-        if self.size > self.memfile_limit and isinstance(self.file, BytesIO):
-            # TODO: What about non-file uploads that exceed the memfile_limit?
-            self.file, old = TemporaryFile(mode="w+b"), self.file
-            old.seek(0)
-            copy_file(old, self.file, self.size, self.buffer_size)
-
-    def finish_header(self):
-        self.file = BytesIO()
+    def set_headers(self, headerlist):
+        self.headerlist = headerlist
         self.headers = Headers(self.headerlist)
         content_disposition = self.headers.get("Content-Disposition", "")
         content_type = self.headers.get("Content-Type", "")
@@ -413,6 +295,22 @@ class MultipartPart(object):
         self.content_type, options = parse_options_header(content_type)
         self.charset = options.get("charset") or self.charset
         self.content_length = int(self.headers.get("Content-Length", "-1"))
+
+    def write_body(self, data):
+        if not data:
+            return
+
+        self.size += len(data)
+        self.file.write(data)
+
+        if self.content_length > 0 and self.size > self.content_length:
+            raise MultipartError("Size of body exceeds Content-Length header.")
+
+        if self.size > self.memfile_limit and isinstance(self.file, BytesIO):
+            # TODO: What about non-file uploads that exceed the memfile_limit?
+            self.file, old = TemporaryFile(mode="w+b"), self.file
+            old.seek(0)
+            copy_file(old, self.file, self.size, self.buffer_size)
 
     def is_buffered(self):
         """ Return true if the data is fully buffered in memory."""
@@ -454,7 +352,272 @@ class MultipartPart(object):
     def close(self):
         if self.file:
             self.file.close()
-            self.file = False
+
+
+class AsyncMultipartParser:
+    def __init__(
+        self,
+        boundary: Union[str, bytes],
+        content_length=-1,
+        max_header_size=4096+128,
+        max_header_count=128,
+        charset="utf8",
+        strict=False
+    ):
+        """ A non-blocking parser for multipart/form-data.
+
+            This parser accepts chunks of data and yields zero or more
+            MultipartBuffers for each chunk. Each MultipartBuffer contains
+            all headers of a multipart segment and all binary data that was
+            parsed so far an not drained yet. Incomplete MultipartBuffers are
+            returned repeatedly until they are complete. It is the
+            responsibility of the caller to do something with the binary data
+            and 'drain' the buffers before they grow too large.
+
+            Pseudocode::
+                with AsyncMultipartParser('boundary') as parser:
+                    tempfile = None
+                    for chunk in read_from_socket():
+                        for buffer in parser.push(chunk):
+                            if not file:
+                                tempfile = tempfile.NamedTemporaryFile()
+                            tempfile.write(buffer.drain())
+                            if buffer.completed:
+                                tempfile.close()
+                                do_something_with(tempfile)
+                                tempfile = None
+
+            :param boundary: The multipart boundary as a (byte) string.
+            :param content_length: Maximum number of bytes to accept, or -1 for no limit.
+            :param max_header_size: Maximum size of a single header (name+value).
+            :param max_header_count: Maximum number of headers per part.
+            :param charset: Charset for header names and values.
+            :param strict: If true, be more picky about parsing.
+        """
+        self.boundary = to_bytes(boundary)
+        self.content_length = content_length
+        self.charset = charset
+        self.max_header_size = max_header_size
+        self.max_header_count = max_header_count
+        self.strict = strict
+
+        self.delimiter = b'--' + self.boundary
+        self.buffer = bytearray()
+        self.parsed = 0
+
+        self.part : Optional[MultipartBuffer] = None
+        self.end = False
+        self.eof = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not exc_type:
+            self.close()
+
+    def close(self):
+        """ Raise MultipartError if the multipart stream is not complete yet. """
+        if not self.end:
+            raise MultipartError("Unexpected end of multipart stream (parser closed)")
+
+    def parse(self, chunk: Union[bytes, bytearray]) -> Iterator["MultipartBuffer"]:
+        """ 
+            Parse a single chunk of data and yield MultipartBuffer instances.
+
+            If not enough data is provided to complete a MultipartBuffer, the
+            same MultipartBuffer will be returned again next time until it is
+            complete. New data is appended to its internal buffer, so make sure
+            to drain this buffer before it grows too large.
+
+            Call with an empty chunk to singal end of stream.
+        """
+
+        buffer = self.buffer
+        delimiter = self.delimiter
+        blen = len(delimiter)
+
+        buffer += chunk # Copy chunk to existing buffer
+        offset = 0
+
+        if self.eof:
+            raise MultipartError("Unexpected data after end of multipart stream.")
+
+        if self.end:
+            if self.strict:
+                raise MultipartError("Unexpected data after final multipart delimiter.")
+            return # just ignore it
+
+        if not len(chunk):
+            self.eof = True
+
+        if self.content_length > -1 and self.parsed + len(buffer) >= self.content_length:
+            self.eof = True
+            if self.parsed + len(buffer) > self.content_length:
+                raise MultipartError("Unexpected data after Content-Length reached.")
+
+        while True:
+            # Begin by searching for the first delimiter and skip all data that
+            # is infront of it. RFC 2046, section 5.1.1 allows a (useless) preamble.
+            if not self.part:
+                bi = buffer.find(delimiter, offset)
+
+                if bi > -1:
+                    tail = buffer[bi+blen:bi+blen+2]
+
+                    # First delimiter found -> Start after it
+                    if tail == b'\r\n':
+                        offset = bi + blen + 2
+                        self.part = MultipartBuffer()
+                        continue
+
+                    # First delimiter is final delimiter! -> Empty multipart stream
+                    if tail == b'--':
+                        offset = bi + blen + 2
+                        self.end = True
+                        break # Stop parsing
+
+                # No delimiter found, skip data until we find one
+                offset = len(buffer) - (blen + 4)
+                break # wait for more data
+
+            # There might be a partial delimiter at the end of our buffer, so stop
+            # parsing and wait for more data if remaining buffer is smaller than a
+            # full final delimiter.
+            if len(buffer) - offset < blen + 4:
+                break # wait for more data
+
+            # Parse header section
+            if self.part._size == -1:
+                nl = buffer.find(b'\r\n', offset)
+
+                # Incomplete header line -> wait for more data
+                if nl == -1:
+                    if len(buffer) - offset > self.max_header_size:
+                        raise MultipartError("Malformed header: Too large")
+                    break # wait for more data
+
+                # Empty line -> end of header segment
+                if nl == offset:
+                    self.part._size = 0 # Mark as header-complete
+                    offset += 2
+                    continue
+
+                # Line start with whitespace -> Header continuation
+                if buffer[offset] in b' \t':
+                    if self.strict:
+                        raise MultipartError("Malformed header: Header Continuation is deprectaed in rfc7230")
+                    if not self.part._headerlist:
+                        raise MultipartError("Malformed header: First header cannot be a continuation")
+                    name, value = self.part._headerlist.pop()
+                    if len(name) + len(value) + nl - offset > self.max_header_size:
+                        # TODO: name and old value are counted as glyphs, not bytes
+                        raise MultipartError("Malformed header: Header too large (continuation)")
+                    value += ' ' + buffer[offset+1:nl].decode(self.charset).strip()
+                    self.part._headerlist.append((name, value))
+                    offset = nl + 2
+                    continue
+
+                col = buffer.find(b':', offset, nl)
+                if col == -1:
+                    raise MultipartError("Malformed header: Expected ':', found CRLF")
+
+                name  = buffer[offset:col].decode(self.charset).strip()
+                value = buffer[col+1:nl].decode(self.charset).strip()
+                if not name:
+                    raise MultipartError("Malformed header: Empty name")
+                self.part._headerlist.append((name, value))
+                offset = nl + 2
+                continue
+
+            # We are in data segment of a part
+            bi = buffer.find(b'\r\n' + delimiter, offset)
+            if bi > -1:
+                tail = buffer[bi+blen+2:bi+blen+4]
+                if tail in (b'\r\n', b'--'):
+                    # Delimiter found -> complete this chunk
+                    self.part._append(buffer[offset:bi])
+                    self.part._complete = True
+                    yield self.part
+                    offset = bi + blen + 4
+
+                    # Normal delimiter
+                    if tail == b'\r\n':
+                        self.part = MultipartBuffer()
+                        continue
+                
+                    # Final delimiter
+                    self.part = None
+                    self.end = True
+                    break
+
+            # No boundary found, or boundary was not an actual delimiter
+            # Yield chunk, but keep enough to ensure we do not miss a partial boundary
+            tail = blen + 3 # len(\r\nboundary\r\n) - 1
+            self.part._append(buffer[offset:-tail])
+            offset = len(buffer) - tail
+            yield self.part
+            break
+
+        # We ran out of data, or reached the end
+        if self.eof and not self.end:
+            raise MultipartError("Unexpected end of multipart stream.")
+        self.parsed += offset
+        buffer[:] = buffer[offset:]
+
+
+
+class MultipartBuffer:
+    """
+        A (partly) parsed multipart segment.
+    """
+    def __init__(self):
+        self._headerlist = []
+        self._headers: Optional[Headers] = None
+        self._buffer = bytearray()
+        self._size = -1
+        self._complete = False
+
+    def _append(self, data):
+        if self._size < 0:
+            self._size = 0
+        if data:
+            self._size += len(data)
+            self._buffer += data
+
+    @property
+    def complete(self):
+        return self._complete
+
+    @property
+    def incomplete(self):
+        return not self._complete
+
+    @property
+    def buffersize(self):
+        """ Current size of internal buffer """
+        return len(self._buffer)
+
+    @property
+    def size(self):
+        """ Total size of body content (so far) """
+        return self._size
+
+    @property
+    def headerlist(self):
+        return self._headerlist[:]
+
+    @property
+    def headers(self):
+        if not self._headers:
+            self._headers = Headers(self._headerlist)
+        return self._headers
+
+    def drain(self):
+        """ Return the current internal buffer and replace it with an empty one. """
+        tmp = self._buffer
+        self._buffer = bytearray()
+        return tmp
 
 
 ##############################################################################
