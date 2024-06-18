@@ -10,7 +10,7 @@ cgi.FieldStorage to work around its limitations.
 
 
 __author__ = "Marcel Hellkamp"
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 __license__ = "MIT"
 __all__ = ["MultipartError", "MultipartParser", "MultipartPart", "parse_form_data"]
 
