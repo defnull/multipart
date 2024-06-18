@@ -34,6 +34,13 @@ Limitations
 Changelog
 ---------
 
+* **0.2.5 (18.06.2024)**
+  * Don't test semicolon separators in urlencoded data (#33)
+  * Add python-requires directive, indicating Python 3.5 or later is required and preventing older Pythons from attempting to download this version (#32)
+  * Add official support for Python 3.10-3.12 (#38, #48)
+  * Default value of ``copy_file`` should be ``2 ** 16``, not ``2 * 16`` (#41)
+  * Update URL for Bottle (#42)
+
 * **0.2.4 (27.01.2021)**
   * Consistently decode non-utf8 URL-encoded form-data
 
