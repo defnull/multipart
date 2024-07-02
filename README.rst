@@ -35,6 +35,7 @@ Changelog
 ---------
 
 * **0.2.5 (18.06.2024)**
+
   * Don't test semicolon separators in urlencoded data (#33)
   * Add python-requires directive, indicating Python 3.5 or later is required and preventing older Pythons from attempting to download this version (#32)
   * Add official support for Python 3.10-3.12 (#38, #48)
@@ -42,21 +43,27 @@ Changelog
   * Update URL for Bottle (#42)
 
 * **0.2.4 (27.01.2021)**
+
   * Consistently decode non-utf8 URL-encoded form-data
 
 * **0.2.3 (20.11.2020)**
+
   * Import MutableMapping from collections.abc (#23)
   * Fix a few more ResourceWarnings in the test suite (#24)
   * Allow stream to contain data before first boundary (#25)
 
 * **0.2.2 (04.09.2020)**
+
   * Fix #21 ResourceWarnings on Python 3
 
 * **0.2.1 (13.06.2020)**
+
   * Fix #20 empty payload
 
 * **0.2 (19.03.2019)**
+
   * Dropped support for Python versions below 3.6. Stay on 0.1 if you need Python 2.5+ support.
 
 * **0.1 (21.06.2010)**
+
   * First release
