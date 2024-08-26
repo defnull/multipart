@@ -470,18 +470,21 @@ class MultipartPart(object):
 
 
 def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
-    """ Parse form data from an environ dict and return a (forms, files) tuple.
-        Both tuple values are dictionaries with the form-field name as a key
-        (unicode) and lists as values (multiple values per key are possible).
-        The forms-dictionary contains form-field values as unicode strings.
-        The files-dictionary contains :class:`MultipartPart` instances, either
-        because the form-field was a file-upload or the value is too big to fit
+    """ Parses both types of form data (multipart and url-encoded) from a WSGI
+        environment and returns a (forms, files) tuple. Both are instances of 
+        :class:`MultiDict` and may contain multiple values per key.
+
+        The forms MultiDict contains text values as strings.
+        The files MultiDict contains :class:`MultipartPart` instances, either
+        because the form-field was a file-upload or the value was too big to fit
         into memory limits.
 
-        :param environ: An WSGI environment dict.
-        :param charset: The charset to use if unsure. (default: utf8)
-        :param strict: If True, raise :exc:`MultipartError` on any parsing
-                       errors. These are silently ignored by default.
+        :param environ:  A WSGI environment dict.
+        :param charset:  The default charset to use to decode text fields.
+        :param strict:   If True, raise :exc:`MultipartError` on any parsing
+                         errors. Those are silently ignored by default.
+        :param **kwargs: Additional keyword arguments are passed to
+                         :class:`MultipartParser`
     """
 
     forms, files = MultiDict(), MultiDict()
