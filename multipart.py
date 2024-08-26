@@ -36,10 +36,8 @@ from collections.abc import MutableMapping as DictMixin
 
 
 class MultiDict(DictMixin):
-    """ A dict that remembers old values for each key.
-        HTTP headers may repeat with differing values,
-        such as Set-Cookie. We need to remember all
-        values.
+    """ A dict that stores multiple values per key. Most dict methods return the
+        last value by default. There are special methods to get all values.
     """
 
     def __init__(self, *args, **kwargs):
@@ -60,6 +58,12 @@ class MultiDict(DictMixin):
 
     def __delitem__(self, key):
         del self.dict[key]
+
+    def __str__(self):
+        return str(self.dict)
+
+    def __repr__(self):
+        return repr(self.dict)
 
     def keys(self):
         return self.dict.keys()
@@ -86,6 +90,7 @@ class MultiDict(DictMixin):
         return self.dict[key][index]
 
     def iterallitems(self):
+        """ Yield (key, value) keys, but for all values. """
         for key, values in self.dict.items():
             for value in values:
                 yield key, value
