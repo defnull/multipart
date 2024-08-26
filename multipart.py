@@ -489,6 +489,10 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
     forms, files = MultiDict(), MultiDict()
 
+    if strict:
+        if 'wsgi.input' not in environ:
+            raise MultipartError("No 'wsgi.input' in environment.")
+
     try:
         if environ.get("REQUEST_METHOD", "GET").upper() not in ("POST", "PUT"):
             raise MultipartError("Request method other than POST or PUT.")
