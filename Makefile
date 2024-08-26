@@ -11,7 +11,7 @@ build: venv
 	$(VENV)/bin/python3 -m build .
 
 test: venv
-	$(VENV)/bin/python3 -m pytest
+	$(VENV)/bin/pytest . -ra -q --doctest-modules --cov=multipart --cov-report=term --cov-report=html:build/htmlcov
 
 upload: build
 	$(VENV)/bin/python3 -m twine upload --skip-existing dist/multipart-*

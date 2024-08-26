@@ -37,8 +37,3 @@ version = {attr = "multipart.__version__"}
 [tool.coverage.run]
 branch = true
 source = ["multipart", "test"]
-
-[tool.pytest.ini_options]
-minversion = "6.0"
-addopts = "-ra -q"
-testpaths = ["test"]
