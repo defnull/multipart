@@ -42,8 +42,13 @@ class MultiDict(DictMixin):
 
     def __init__(self, *args, **kwargs):
         self.dict = {}
-        for k, v in args:
-            self[k] = v
+        for arg in args:
+            if hasattr(arg, 'items'):
+                for k, v in arg.items():
+                    self[k] = v
+            else:
+                for k, v in arg:
+                    self[k] = v
         for k, v in kwargs.items():
             self[k] = v
 
@@ -284,16 +289,12 @@ class MultipartParser(object):
         # Consume first boundary. Ignore any preamble, as required by RFC
         # 2046, section 5.1.1.
         for line, nl in lines:
-            if line in (separator, terminator):
+            if line == separator:
                 break
+            if line == terminator:
+                return  # Empty form
         else:
             raise MultipartError("Stream does not contain boundary")
-
-        # Check for empty data
-        if line == terminator:
-            for _ in lines:
-                raise MultipartError("Data after end of stream")
-            return
 
         # For each part in stream...
         mem_used, disk_used = 0, 0  # Track used resources to prevent DoS
@@ -309,7 +310,7 @@ class MultipartParser(object):
 
         for line, nl in lines:
             if line == terminator and not is_tail:
-                part.file.seek(0)
+                part.end_part()
                 yield part
                 break
 
@@ -318,8 +319,8 @@ class MultipartParser(object):
                     mem_used += part.size
                 else:
                     disk_used += part.size
-                part.file.seek(0)
 
+                part.end_part()
                 yield part
 
                 part = MultipartPart(**opts)
@@ -337,13 +338,9 @@ class MultipartParser(object):
                 except MultipartError:
                     part.close()
                     raise
-        else:
-            # If we run off the end of the loop, the current MultipartPart
-            # will not have been yielded, so it's our responsibility to
-            # close it.
-            part.close()
 
         if line != terminator:
+            part.close()
             raise MultipartError("Unexpected end of multipart stream.")
 
 
@@ -368,6 +365,11 @@ class MultipartPart(object):
 
         return self.write_header(line, nl)
 
+    def end_part(self):
+        if not self.file:
+            raise MultipartError("Unexpected end of part within header section.")
+        self.file.seek(0)
+
     def write_header(self, line, nl):
         line = line.decode(self.charset)
 
@@ -387,8 +389,8 @@ class MultipartPart(object):
             self.headerlist.append((name.strip(), value.strip()))
 
     def write_body(self, line, nl):
-        if not line and not nl:
-            return  # This does not even flush the buffer
+        if not line and not nl: # pragma: no cover
+            return  # No new data (should not happen)
 
         self.size += len(line) + len(self._buf)
         self.file.write(self._buf + line)
@@ -431,17 +433,12 @@ class MultipartPart(object):
 
     @property
     def raw(self):
-        """ Data without decoding """
+        """ Raw binary data """
         pos = self.file.tell()
         self.file.seek(0)
 
-        try:
-            val = self.file.read()
-        except IOError:
-            raise
-        finally:
-            self.file.seek(pos)
-
+        val = self.file.read()
+        self.file.seek(pos)
         return val
 
     def save_as(self, path):

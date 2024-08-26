@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 import unittest
 import base64
-import sys, os.path, tempfile
+import os.path, tempfile
 
 from io import BytesIO
 
-try:
-    import multipart as mp
-except ModuleNotFoundError:
-    raise SystemExit("multipart not resolveable. Try 'python setup.py develop'.")
-
+import multipart as mp
 from multipart import to_bytes
 
 #TODO: bufsize=10, line=1234567890--boundary\n
@@ -260,6 +256,7 @@ class TestBrokenMultipart(unittest.TestCase):
                     'wsgi.input': self.data}
 
     def write(self, *lines):
+        self.data.truncate(0)
         for line in lines:
             self.data.write(to_bytes(line))
 
@@ -304,6 +301,14 @@ class TestBrokenMultipart(unittest.TestCase):
         self.env['CONTENT_TYPE'] = 'multipart/form-data'
         self.assertMPError()
 
+    def test_part_ends_after_header(self):
+        self.write('--foo\r\n', 'Header: value\r\n', '--foo--')
+        self.assertMPError()
+
+    def test_part_ends_in_header(self):
+        self.write('--foo\r\n', 'Header: value', '--foo--')
+        self.assertMPError()
+
     def test_no_terminator(self):
         self.write('--foo\r\n',
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
@@ -325,7 +330,7 @@ class TestBrokenMultipart(unittest.TestCase):
         self.assertEqual(len(files), 1)
         self.assertTrue(to_bytes('name="file2"') in files['file1'].file.read())
 
-    def test_preamble_before_start_boundary(self):
+    def test_ignore_junk_before_start_boundary(self):
         forms, files = self.parse('Preamble\r\n', '--foo\r\n'
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--')
@@ -334,10 +339,31 @@ class TestBrokenMultipart(unittest.TestCase):
         self.assertEqual(files['file1'].name, 'file1')
         self.assertEqual(files['file1'].content_type, 'image/png')
 
+    def test_allow_junk_after_end_boundary(self):
+        self.parse('--foo--\r\njunk')
+        self.parse('--foo\r\n'
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--foo--\r\n', 'junk') 
+
     def test_no_start_boundary(self):
         self.write('--bar\r\n','--nonsense\r\n'
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--nonsense--')
+        self.assertMPError()
+
+    def test_no_end_boundary(self):
+        self.write('--foo\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n')
+        self.assertMPError()
+
+    def test_just_end_boundary(self):
+        files, forms = self.parse('--foo--') # is fine
+        self.assertTrue(not files)
+        self.assertTrue(not forms)
+
+    def test_empty_part(self):
+        self.write('--foo\r\n', '--foo--')
         self.assertMPError()
 
     def test_disk_limit(self):
