@@ -43,8 +43,10 @@ class MultiDict(DictMixin):
     """
 
     def __init__(self, *args, **kwargs):
-        self.dict = dict()
-        for k, v in dict(*args, **kwargs).items():
+        self.dict = {}
+        for k, v in args:
+            self[k] = v
+        for k, v in kwargs.items():
             self[k] = v
 
     def __len__(self):
