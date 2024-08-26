@@ -301,6 +301,16 @@ class TestBrokenMultipart(unittest.TestCase):
         self.env['CONTENT_TYPE'] = 'multipart/form-data'
         self.assertMPError()
 
+    def test_invalid_content_length(self):
+        self.env['CONTENT_LENGTH'] = ''
+        self.assertMPError()
+        self.env['CONTENT_LENGTH'] = 'notanumber'
+        self.assertMPError()
+
+    def test_invalid_environ(self):
+        del self.env['wsgi.input']
+        self.assertMPError()
+
     def test_part_ends_after_header(self):
         self.write('--foo\r\n', 'Header: value\r\n', '--foo--')
         self.assertMPError()

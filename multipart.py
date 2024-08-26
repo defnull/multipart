@@ -476,8 +476,8 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
         :param environ:  A WSGI environment dict.
         :param charset:  The default charset to use to decode text fields.
-        :param strict:   If True, raise :exc:`MultipartError` on any parsing
-                         errors. Those are silently ignored by default.
+        :param strict:   If True, raise :exc:`MultipartError` for non-fatal
+                         parsing errors. Fatal errors always raise an exception.
         :param **kwargs: Additional keyword arguments are passed to
                          :class:`MultipartParser`
     """
@@ -491,7 +491,10 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
     try:
         if environ.get("REQUEST_METHOD", "GET").upper() not in ("POST", "PUT"):
             raise MultipartError("Request method other than POST or PUT.")
-        content_length = int(environ.get("CONTENT_LENGTH", "-1"))
+        try:
+            content_length = int(environ.get("CONTENT_LENGTH", "-1"))
+        except ValueError:
+            raise MultipartError("Invalid Content-Length header.")
         content_type = environ.get("CONTENT_TYPE", "")
 
         if not content_type:
