@@ -281,6 +281,9 @@ class TestBrokenMultipart(unittest.TestCase):
         self.data.seek(0)
         self.assertTrue(mp.parse_form_data(**ka))
 
+    def test_empty(self):
+        self.assertMPError()
+
     def test_big_boundary(self):
         self.env['CONTENT_TYPE'] = 'multipart/form-data; boundary='+'foo'*1024
         self.assertMPError(buffer_size=1024*3)

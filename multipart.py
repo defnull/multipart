@@ -250,16 +250,14 @@ class MultipartParser(object):
             data = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
             maxread -= len(data)
             lines = (buffer + data).splitlines(True)
-            len_first_line = len(lines[0])
 
-            # be sure that the first line does not become too big
-            if len_first_line > self.buffer_size:
+            # make sure that the first line does not exceed buffer_size
+            if lines and len(lines[0]) > self.buffer_size:
+                split = self.buffer_size
                 # at the same time don't split a '\r\n' accidentally
-                if len_first_line == self.buffer_size + 1 and lines[0].endswith(b"\r\n"):
-                    splitpos = self.buffer_size - 1
-                else:
-                    splitpos = self.buffer_size
-                lines[:1] = [lines[0][:splitpos], lines[0][splitpos:]]
+                if len(lines[0]) == split + 1 and lines[0].endswith(b"\r\n"):
+                    split -= 1
+                lines[:1] = [lines[0][:split], lines[0][split:]]
 
             if data:
                 buffer = lines[-1]
