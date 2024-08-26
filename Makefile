@@ -10,5 +10,8 @@ $(VENV)/.installed: Makefile
 build: venv
 	$(VENV)/bin/python3 -m build .
 
+test: venv
+	$(VENV)/bin/python3 -m pytest
+
 upload: build
 	$(VENV)/bin/python3 -m twine upload --skip-existing dist/multipart-*
