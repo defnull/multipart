@@ -1,38 +1,33 @@
 # -*- coding: utf-8 -*-
 """
-Parser for multipart/form-data
-==============================
+This module provides multiple parsers for RFC-7578 `multipart/form-data`,
+both low-level for framework authors and high-level for WSGI application
+developers.
 
-This module provides a parser for the multipart/form-data format. It can read
-from a file, a socket or a WSGI environment. The parser can be used to replace
-cgi.FieldStorage to work around its limitations.
+Copyright (c) 2010-2024, Marcel Hellkamp
+License: MIT (see LICENSE file)
 """
 
 
 __author__ = "Marcel Hellkamp"
 __version__ = "1.0-dev"
 __license__ = "MIT"
-__all__ = ["MultipartError", "MultipartParser", "MultipartPart", "parse_form_data"]
+__all__ = ["MultipartError", "parse_form_data", "MultipartParser", "MultipartPart", "PushMultipartParser", "MultipartSegment"]
 
 
 import re
-import sys
 from io import BytesIO
-from tempfile import TemporaryFile
+from typing import Iterator, Union, Optional, Tuple, List
 from urllib.parse import parse_qs
 from wsgiref.headers import Headers
 from collections.abc import MutableMapping as DictMixin
+import tempfile
 
 
 ##############################################################################
 ################################ Helper & Misc ###############################
 ##############################################################################
 # Some of these were copied from bottle: https://bottlepy.org
-
-
-# ---------
-# MultiDict
-# ---------
 
 
 class MultiDict(DictMixin):
@@ -147,8 +142,9 @@ def header_unquote(val, filename=False):
     if val[0] == val[-1] == '"':
         val = val[1:-1]
 
-        if val[1:3] == ":\\" or val[:2] == "\\\\":
-            val = val.split("\\")[-1]  # fix ie6 bug: full path --> filename
+        # fix ie6 bug: full path --> filename
+        if filename and (val[1:3] == ":\\" or val[:2] == "\\\\"):
+            val = val.split("\\")[-1]
 
         return val.replace("\\\\", "\\").replace('\\"', '"')
 
@@ -171,12 +167,360 @@ def parse_options_header(header, options=None):
 
 
 ##############################################################################
-################################## Multipart #################################
+################################## SansIO Parser #############################
 ##############################################################################
 
 
 class MultipartError(ValueError):
     pass
+
+
+# Parser states as constants
+_PREAMBLE = "PREAMBLE"
+_HEADER = "HEADER"
+_BODY = "BODY"
+_COMPLETE = "END"
+
+
+class PushMultipartParser:
+    def __init__(
+        self,
+        boundary: Union[str, bytes],
+        content_length=-1,
+        max_header_size=4096 + 128,  # 4KB should be enough for everyone
+        max_header_count=8,  # RFC 7578 allows just 3
+        max_segment_size=2**64,  # Practically unlimited
+        max_segment_count=2**64,  # Practically unlimited
+        header_charset="utf8",
+        strict=False,
+    ):
+        """A push-based (incremental, non-blocking) parser for multipart/form-data.
+
+        In `strict` mode, the parser will be less forgiving and bail out
+        more quickly, avoiding unnecessary computations caused by broken or
+        malicious clients.
+
+        The various limits are meant as safeguards and exceeding any of those
+        limit triggers a :exc:`MultipartError`.
+
+        :param boundary: The multipart boundary as found in the Content-Type header.
+        :param content_length: Maximum number of bytes to parse, or -1 for no limit.
+        :param max_header_size: Maximum size of a single header (name+value).
+        :param max_header_count: Maximum number of headers per segment.
+        :param max_segment_size: Maximum size of a single segment.
+        :param max_segment_count: Maximum number of segments.
+        :param header_charset: Charset for header names and values.
+        :param strict: Enable more format and sanity checks.
+        """
+        self.boundary = to_bytes(boundary)
+        self.content_length = content_length
+        self.header_charset = header_charset
+        self.max_header_size = max_header_size
+        self.max_header_count = max_header_count
+        self.max_segment_size = max_segment_size
+        self.max_segment_count = max_segment_count
+        self.strict = strict
+
+        self._delimiter = b"--" + self.boundary
+
+        # Internal parser state
+        self._parsed = 0
+        self._fieldcount = 0
+        self._buffer = bytearray()
+        self._current = None
+        self._state = _PREAMBLE
+
+        #: True if the parser was closed.
+        self.closed = False
+        #: The last error
+        self.error = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close(check_complete=not exc)
+
+    def parse(
+        self, chunk: Union[bytes, bytearray]
+    ) -> Iterator[Union["MultipartSegment", bytearray, None]]:
+        """Parse a chunk of data and yield as many result objects as possible
+        with the data given.
+
+        For each multipart segment, the parser will emit a single instance
+        of :class:`MultipartSegment` with all headers already present,
+        followed by zero or more non-empty `bytearray` instances containing
+        parts of the segment body, followed by a single `None` signaling the
+        end of the segment.
+
+        The returned iterator iterator will stop if more data is required or
+        if the end of the multipart stream was detected. The iterator must
+        be fully consumed before parsing the next chunk. End of input can be
+        signaled by parsing an empty chunk or closing the parser. This is
+        important to verify the multipart message was parsed completely and
+        the last segment is actually complete.
+
+        Format errors or exceeded limits will trigger :exc:`MultipartError`.
+        """
+
+        if not chunk:
+            self.close()
+            return
+
+        if self.closed:
+            raise self._fail("Parser closed")
+
+        if self.content_length > -1 and self.content_length < self._parsed + len(
+            self._buffer
+        ) + len(chunk):
+            raise self._fail("Content-Length limit exceeded")
+
+        if self._state is _COMPLETE:
+            if self.strict:
+                raise self._fail("Unexpected data after end of multipart stream")
+            return
+
+        buffer = self._buffer
+        delimiter = self._delimiter
+        buffer += chunk  # Copy chunk to existing buffer
+        offset = 0
+        d_len = len(delimiter)
+        bufferlen = len(buffer)
+
+        while True:
+
+            # Scan for first delimiter
+            if self._state is _PREAMBLE:
+                index = buffer.find(delimiter, offset)
+
+                if (index == -1 or index > offset) and self.strict:
+                    # Data before the first delimiter is allowed (RFC 2046,
+                    # section 5.1.1) but very uncommon.
+                    raise self._fail("Unexpected data in front of first delimiter")
+
+                if index > -1:
+                    tail = buffer[index + d_len : index + d_len + 2]
+
+                    # First delimiter found -> Start after it
+                    if tail == b"\r\n":
+                        self._current = MultipartSegment(self)
+                        self._state = _HEADER
+                        offset = index + d_len + 2
+                        continue
+
+                    # First delimiter is terminator -> Empty multipart stream
+                    if tail == b"--":
+                        offset = index + d_len + 2
+                        self._state = _COMPLETE
+                        break  # parsing complete
+
+                # delimiter found, skip data until we find one
+                offset = bufferlen - (d_len + 4)
+                break  # wait for more data
+
+            # Parse header section
+            elif self._state is _HEADER:
+                nl = buffer.find(b"\r\n", offset)
+
+                if nl > offset:  # Non-empty header line
+                    self._current._add_headerline(buffer[offset:nl])
+                    offset = nl + 2
+                    continue
+                elif nl == offset:  # Empty header line -> End of header section
+                    self._current._close_headers()
+                    yield self._current
+                    self._state = _BODY
+                    offset += 2
+                    continue
+                else:  # No CRLF found -> Ask for more data
+                    if bufferlen - offset > self.max_header_size:
+                        raise self._fail("Maximum segment header length exceeded")
+                    break  # wait for more data
+
+            # Parse body until next delimiter is found
+            elif self._state is _BODY:
+                index = buffer.find(b"\r\n" + delimiter, offset)
+                tail = index > -1 and buffer[index + d_len + 2 : index + d_len + 4]
+
+                if tail in (b"\r\n", b"--"):  # Delimiter or terminator found
+                    if index > offset:
+                        self._current._update_size(index - offset)
+                        yield buffer[offset:index]
+                    offset = index + d_len + 4
+                    self._current._mark_complete()
+                    yield None
+
+                    if tail == b"--":  # Delimiter was a terminator
+                        self._state = _COMPLETE
+                        break
+
+                    # Normal delimiter, continue with next segment
+                    self._current = MultipartSegment(self)
+                    self._state = _HEADER
+                    continue
+
+                # No delimiter or terminator found
+                min_keep = d_len + 3
+                chunk = buffer[offset:-min_keep]
+                if chunk:
+                    self._current._update_size(len(chunk))
+                    offset += len(chunk)
+                    yield chunk
+                break  # wait for more data
+
+            else:  # pragma: no cover
+                self._fail(f"Unexpected internal state: {self._state}")
+
+        # We ran out of data, or reached the end
+        self._parsed += offset
+        buffer[:] = buffer[offset:]
+
+    def _fail(self, msg):
+        err = MultipartError(msg)
+        if not self.error:
+            self.error = err
+        self.close(check_complete=False)
+        raise err
+
+    def close(self, check_complete=True):
+        """
+        Close this parser if not already closed.
+
+        :param check_complete: Raise MultipartError if the parser did not
+            reach the end of the multipart stream yet.
+        """
+
+        self.closed = True
+        self._current = None
+        del self._buffer[:]
+
+        if check_complete and not self._state is _COMPLETE:
+            self._fail("Unexpected end of multipart stream (parser closed)")
+
+
+class MultipartSegment:
+
+    #: List of headers as name/value pairs with normalized (Title-Case) names.
+    headerlist: List[Tuple[str, str]]
+    #: The required 'name' option of the Content-Disposition header.
+    name: str
+    #: The optional 'filename' option of the Content-Disposition header.
+    filename: Optional[str]
+    #: The Content-Type of this segment, if the header was present.
+    #: Not the entire header, just the actual content type without options.
+    content_type: Optional[str]
+    #: The 'charset' option of the Content-Type header, if present.
+    charset: Optional[str]
+
+    #: Segment body size (so far). Will be updated during parsing.
+    size: int
+    #: If true, the last chunk of segment body data was parsed and the size
+    #: value is final.
+    complete: bool
+
+    def __init__(self, parser: PushMultipartParser):
+        """ MultipartSegments are created by the PushMultipartParser and
+        represent a single multipart segment, but do not store or buffer any
+        of the content. The parser will emit MultipartSegments with a fully
+        populated headerlist and derived information (name, filename, ...) can
+        be accessed.
+        """
+        self._parser = parser
+
+        if parser._fieldcount+1 > parser.max_segment_count:
+            parser._fail("Maximum segment count exceeded")
+        parser._fieldcount += 1
+
+        self.headerlist = []
+        self.size = 0
+        self.complete = 0
+
+        self.name = None
+        self.filename = None
+        self.content_type = None
+        self.charset = None
+        self._clen = -1
+        self._fail = parser._fail
+        self._size_limit = parser.max_segment_size
+
+
+    def _add_headerline(self, line: bytearray):
+        assert line and not self.name
+
+        if line[0] in b" \t":  # Multi-line header value
+            if not self.headerlist or self._parser.strict:
+                raise self._fail("Unexpected segment header continuation")
+            prev = ": ".join(self.headerlist.pop())
+            line = prev.encode(self._parser.header_charset) + b" " + line.strip()
+
+        if len(line) > self._parser.max_header_size:
+            raise self._fail("Maximum segment header length exceeded")
+        if len(self.headerlist) >= self._parser.max_header_count:
+            raise self._fail("Maximum segment header count exceeded")
+
+        try:
+            name, col, value = line.partition(b":")
+            name = name.strip().decode(self._parser.header_charset)
+            value = value.strip().decode(self._parser.header_charset)
+            if not col or not name:
+                raise self._fail("Malformed segment header")
+            if " " in name or not name.isascii() or not name.isprintable():
+                raise self._fail("Invalid segment header name")
+        except UnicodeDecodeError as err:
+            raise self._fail("Segment header failed to decode")
+
+        self.headerlist.append((name.title(), value))
+
+    def _close_headers(self):
+        assert not self.name and not self.complete
+
+        cdisp = self.header("Content-Disposition")
+        if not cdisp:
+            raise self._fail("Missing Content-Disposition segment header")
+        cdisp, args = parse_options_header(cdisp)
+        if cdisp != "form-data" or "name" not in args:
+            raise self._fail("Invalid Content-Disposition segment header")
+        self.name = args.get("name")
+        self.filename = args.get("filename")
+
+        content_type = self.header("Content-Type", "application/octet-stream")
+        self.content_type, args = parse_options_header(content_type)
+        self.charset = args.get("charset", self._parser.header_charset)
+
+        self._clen = int(self.header("Content-Length", -1))
+
+    def _update_size(self, bytecount: int):
+        assert self.name and not self.complete
+        self.size += bytecount
+        if self._clen >= 0 and self.size > self._clen:
+            raise self._fail("Segment Content-Length exceeded")
+        if self.size > self._size_limit:
+            raise self._fail("Maximum segment size exceeded")
+
+    def _mark_complete(self):
+        assert self.name and not self.complete
+        if self._clen >= 0 and self.size != self._clen:
+            raise self._fail("Segment size does not match Content-Length header")
+        self.complete = True
+
+    def header(self, name: str, default=None):
+        """Return the value of a header if present, or a default value."""
+        compare = name.title()
+        for hname, value in self.headerlist[::-1]:
+            if hname == compare:
+                return value
+        if default is KeyError:
+            raise KeyError(name)
+        return default
+
+    def __getitem__(self, name):
+        """Return a header value if present, or raise KeyError."""
+        return self.header(name, KeyError)
+
+
+##############################################################################
+################################## Multipart #################################
+##############################################################################
 
 
 class MultipartParser(object):
@@ -185,52 +529,80 @@ class MultipartParser(object):
         stream,
         boundary,
         content_length=-1,
-        disk_limit=2 ** 30,
-        mem_limit=2 ** 20,
-        memfile_limit=2 ** 18,
-        buffer_size=2 ** 16,
-        charset="latin1",
+        charset="utf8",
+        strict=False,
+        buffer_size=1024 * 64,
+        header_limit=8,
+        headersize_limit=1024 * 4 + 128,  # 4KB
+        part_limit=128,
+        partsize_limit=2**64,  # practically unlimited
+        spool_limit=1024 * 64,  # Keep fields up to 64KB in memory
+        memory_limit=1024 * 64 * 128,  # spool_limit * part_limit
+        disk_limit=2**64,  # practically unlimited
+        mem_limit=0,
+        memfile_limit=0,
     ):
-        """ Parse a multipart/form-data byte stream. This object is an iterator
-            over the parts of the message.
+        """A parser that reads from a multipart/form-data encoded byte stream
+        and yields :class:`MultipartPart` instances.
 
-            :param stream: A file-like stream. Must implement ``.read(size)``.
-            :param boundary: The multipart boundary as a byte string.
-            :param content_length: The maximum number of bytes to read.
+        The parse itself is an iterator and will read and parse data on
+        demand. results are cached, so once fully parsed, it can be iterated
+        over again.
+
+        :param stream: A readable byte stream. Must implement ``.read(size)``.
+        :param boundary: The multipart boundary as found in the Content-Type header.
+        :param content_length: The maximum number of bytes to read.
+        :param charset: Default charset for headers and text fields.
+        :param strict: If true, the parser will reject invalid or strange inputs.
+        :param buffer_size: Size of chunks read from the source stream
+
+        :param header_limit: Maximum number of headers per segment
+        :param headersize_limit: Maximum size of a segment header line
+        :param part_limit: Maximum number of segments to parse
+        :param partsize_limit: Maximum size of a segment body
+        :param spool_limit: Segments up to this size are buffered in memory,
+            larger segments are spooled to temporary files on disk.
+        :param memory_limit: Maximum size of all memory-buffered segments
+        :param disk_limit: Maximum size of all disk-buffered segments
+
+        :param memfile_limit: Deprecated alias for `spool_limit`.
+        :param mem_limit: Deprecated alias for `memory_limit`.
         """
         self.stream = stream
         self.boundary = boundary
         self.content_length = content_length
-        self.disk_limit = disk_limit
-        self.memfile_limit = memfile_limit
-        self.mem_limit = min(mem_limit, self.disk_limit)
-        self.buffer_size = min(buffer_size, self.mem_limit)
         self.charset = charset
-
-        if self.buffer_size - 6 < len(boundary):  # "--boundary--\r\n"
-            raise MultipartError("Boundary does not fit into buffer_size.")
+        self.strict = strict
+        self.buffer_size = buffer_size
+        self.header_limit = header_limit
+        self.headersize_limit = headersize_limit
+        self.part_limit = part_limit
+        self.partsize_limit = partsize_limit
+        self.spool_limit = memfile_limit or spool_limit
+        self.memory_limit = mem_limit or memory_limit
+        self.disk_limit = disk_limit
 
         self._done = []
         self._part_iter = None
 
     def __iter__(self):
-        """ Iterate over the parts of the multipart message. """
+        """Iterate over the parts of the multipart message."""
         if not self._part_iter:
             self._part_iter = self._iterparse()
 
-        for part in self._done:
-            yield part
+        if self._done:
+            yield from self._done
 
         for part in self._part_iter:
             self._done.append(part)
             yield part
 
     def parts(self):
-        """ Returns a list with all parts of the multipart message. """
+        """Returns a list with all parts of the multipart message."""
         return list(self)
 
     def get(self, name, default=None):
-        """ Return the first part with that name or a default value (None). """
+        """Return the first part with that name or a default value."""
         for part in self:
             if name == part.name:
                 return part
@@ -238,207 +610,103 @@ class MultipartParser(object):
         return default
 
     def get_all(self, name):
-        """ Return a list of parts with that name. """
+        """Return a list of parts with that name."""
         return [p for p in self if p.name == name]
 
-    def _lineiter(self):
-        """ Iterate over a binary file-like object line by line. Each line is
-            returned as a (line, line_ending) tuple. If the line does not fit
-            into self.buffer_size, line_ending is empty and the rest of the line
-            is returned with the next iteration.
-        """
-        read = self.stream.read
-        maxread, maxbuf = self.content_length, self.buffer_size
-        buffer = b""  # buffer for the last (partial) line
-
-        while True:
-            data = read(maxbuf if maxread < 0 else min(maxbuf, maxread))
-            maxread -= len(data)
-            lines = (buffer + data).splitlines(True)
-
-            # make sure that the first line does not exceed buffer_size
-            if lines and len(lines[0]) > self.buffer_size:
-                split = self.buffer_size
-                # at the same time don't split a '\r\n' accidentally
-                if len(lines[0]) == split + 1 and lines[0].endswith(b"\r\n"):
-                    split -= 1
-                lines[:1] = [lines[0][:split], lines[0][split:]]
-
-            if data:
-                buffer = lines[-1]
-                lines = lines[:-1]
-
-            for line in lines:
-                if line.endswith(b"\r\n"):
-                    yield line[:-2], b"\r\n"
-                elif line.endswith(b"\n"):
-                    yield line[:-1], b"\n"
-                elif line.endswith(b"\r"):
-                    yield line[:-1], b"\r"
-                else:
-                    yield line, b""
-
-            if not data:
-                break
-
     def _iterparse(self):
-        lines, line = self._lineiter(), ""
-        separator = b"--" + to_bytes(self.boundary)
-        terminator = b"--" + to_bytes(self.boundary) + b"--"
+        read = self.stream.read
+        bufsize = self.buffer_size
+        mem_used = disk_used = 0
 
-        # Consume first boundary. Ignore any preamble, as required by RFC
-        # 2046, section 5.1.1.
-        for line, nl in lines:
-            if line == separator:
-                break
-            if line == terminator:
-                return  # Empty form
-        else:
-            raise MultipartError("Stream does not contain boundary")
+        part = None
+        parser = PushMultipartParser(
+            boundary=self.boundary,
+            content_length=self.content_length,
+            max_header_count=self.header_limit,
+            max_header_size=self.headersize_limit,
+            max_segment_count=self.part_limit,
+            max_segment_size=self.partsize_limit,
+            header_charset=self.charset,
+        )
 
-        # For each part in stream...
-        mem_used, disk_used = 0, 0  # Track used resources to prevent DoS
-        is_tail = False  # True if the last line was incomplete (cutted)
-
-        opts = {
-            "buffer_size": self.buffer_size,
-            "memfile_limit": self.memfile_limit,
-            "charset": self.charset,
-        }
-
-        part = MultipartPart(**opts)
-
-        for line, nl in lines:
-            if line == terminator and not is_tail:
-                part.end_part()
-                yield part
-                break
-
-            elif line == separator and not is_tail:
-                if part.is_buffered():
-                    mem_used += part.size
-                else:
-                    disk_used += part.size
-
-                part.end_part()
-                yield part
-
-                part = MultipartPart(**opts)
-
-            else:
-                is_tail = not nl  # The next line continues this one
-                try:
-                    part.feed(line, nl)
-
-                    if part.is_buffered():
-                        if part.size + mem_used > self.mem_limit:
-                            raise MultipartError("Memory limit reached.")
-                    elif part.size + disk_used > self.disk_limit:
-                        raise MultipartError("Disk limit reached.")
-                except MultipartError:
-                    part.close()
-                    raise
-
-        if line != terminator:
-            part.close()
-            raise MultipartError("Unexpected end of multipart stream.")
+        with parser:
+            while not parser.closed:
+                for event in parser.parse(read(bufsize)):
+                    if isinstance(event, MultipartSegment):
+                        max_spool = min(
+                            self.spool_limit, max(0, self.memory_limit - mem_used)
+                        )
+                        part = MultipartPart(
+                            buffer_size=self.buffer_size,
+                            memfile_limit=max_spool,
+                            charset=self.charset,
+                            segment=event,
+                        )
+                    elif event:
+                        part._write(event)
+                        if part.is_buffered():
+                            if part.size + mem_used > self.memory_limit:
+                                raise MultipartError("Memory limit reached.")
+                        elif part.size + disk_used > self.disk_limit:
+                            raise MultipartError("Disk limit reached.")
+                    else:
+                        if part.is_buffered():
+                            mem_used += part.size
+                        else:
+                            disk_used += part.size
+                        part._mark_complete()
+                        yield part
+                        part = None
 
 
 class MultipartPart(object):
-    def __init__(self, buffer_size=2 ** 16, memfile_limit=2 ** 18, charset="latin1"):
-        self.headerlist = []
-        self.headers = None
-        self.file = None
+    def __init__(
+        self,
+        buffer_size=2**16,
+        memfile_limit=2**18,
+        charset="utf8",
+        segment: "MultipartSegment" = None,
+    ):
+        self._segment = segment
+        #: A file-like object holding the fields content
+        self.file = tempfile.SpooledTemporaryFile(max_size=memfile_limit)
         self.size = 0
-        self._buf = b""
-        self.disposition = None
-        self.name = None
-        self.filename = None
-        self.content_type = None
-        self.charset = charset
+        self.disposition = segment.header("Content-Disposition")
+        self.name = segment.name
+        self.filename = segment.filename
+        self.content_type = segment.content_type
+        self.charset = segment.charset or charset
+        self.headerlist = segment.headerlist
+        self.headers = Headers(segment.headerlist)
+
         self.memfile_limit = memfile_limit
         self.buffer_size = buffer_size
 
-    def feed(self, line, nl=b""):
-        if self.file:
-            return self.write_body(line, nl)
+    def _write(self, chunk):
+        self.size += len(chunk)
+        self.file.write(chunk)
 
-        return self.write_header(line, nl)
-
-    def end_part(self):
-        if not self.file:
-            raise MultipartError("Unexpected end of part within header section.")
+    def _mark_complete(self):
         self.file.seek(0)
 
-    def write_header(self, line, nl):
-        line = line.decode(self.charset)
-
-        if not nl:
-            raise MultipartError("Unexpected end of line in header.")
-
-        if not line.strip():  # blank line -> end of header segment
-            self.finish_header()
-        elif line[0] in " \t" and self.headerlist:
-            name, value = self.headerlist.pop()
-            self.headerlist.append((name, value + line.strip()))
-        else:
-            if ":" not in line:
-                raise MultipartError("Syntax error in header: No colon.")
-
-            name, value = line.split(":", 1)
-            self.headerlist.append((name.strip(), value.strip()))
-
-    def write_body(self, line, nl):
-        if not line and not nl: # pragma: no cover
-            return  # No new data (should not happen)
-
-        self.size += len(line) + len(self._buf)
-        self.file.write(self._buf + line)
-        self._buf = nl
-
-        if self.content_length > 0 and self.size > self.content_length:
-            raise MultipartError("Size of body exceeds Content-Length header.")
-
-        if self.size > self.memfile_limit and isinstance(self.file, BytesIO):
-            # TODO: What about non-file uploads that exceed the memfile_limit?
-            self.file, old = TemporaryFile(mode="w+b"), self.file
-            old.seek(0)
-            copy_file(old, self.file, self.size, self.buffer_size)
-
-    def finish_header(self):
-        self.file = BytesIO()
-        self.headers = Headers(self.headerlist)
-        content_disposition = self.headers.get("Content-Disposition", "")
-        content_type = self.headers.get("Content-Type", "")
-
-        if not content_disposition:
-            raise MultipartError("Content-Disposition header is missing.")
-
-        self.disposition, self.options = parse_options_header(content_disposition)
-        self.name = self.options.get("name")
-        self.filename = self.options.get("filename")
-        self.content_type, options = parse_options_header(content_type)
-        self.charset = options.get("charset") or self.charset
-        self.content_length = int(self.headers.get("Content-Length", "-1"))
-
     def is_buffered(self):
-        """ Return true if the data is fully buffered in memory."""
-        return isinstance(self.file, BytesIO)
+        """Return true if the data is fully buffered in memory."""
+        return isinstance(self.file._file, BytesIO)
 
     @property
     def value(self):
-        """ Return the entire payload as decoded text.
-         
-            Warning, this may consume a lot of memory, check size first.
+        """Return the entire payload as decoded text.
+
+        Warning, this may consume a lot of memory, check size first.
         """
 
         return self.raw.decode(self.charset)
 
     @property
     def raw(self):
-        """ Return the entire payload as a raw byte string.
-         
-            Warning, this may consume a lot of memory, check size first.
+        """Return the entire payload as a raw byte string.
+
+        Warning, this may consume a lot of memory, check size first.
         """
         pos = self.file.tell()
         self.file.seek(0)
@@ -448,15 +716,14 @@ class MultipartPart(object):
         return val
 
     def save_as(self, path):
+        """Save a copy of this part to `path` and return its size."""
         with open(path, "wb") as fp:
             pos = self.file.tell()
-
             try:
                 self.file.seek(0)
-                size = copy_file(self.file, fp)
+                size = copy_file(self.file, fp, buffer_size=self.buffer_size)
             finally:
                 self.file.seek(pos)
-
         return size
 
     def close(self):
@@ -475,17 +742,21 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
         environment and returns a (forms, files) tuple. Both are instances of 
         :class:`MultiDict` and may contain multiple values per key.
 
-        The forms MultiDict contains text values as strings.
-        The files MultiDict contains :class:`MultipartPart` instances, either
+        The `forms` MultiDict contains text form fields as strings.
+        The `files` MultiDict contains :class:`MultipartPart` instances, either
         because the form-field was a file-upload or the value was too big to fit
         into memory limits.
 
-        :param environ:  A WSGI environment dict.
-        :param charset:  The default charset to use to decode text fields.
+        In case of an url-encoded form request, the total request body size is
+        limited by `memory_limit`. Larger requests will rigger an error. 
+
+        :param environ:  A WSGI environment dictionary.
+        :param charset:  The default charset to use to decode headers and text fields.
         :param strict:   If True, raise :exc:`MultipartError` for non-fatal
                          parsing errors. Fatal errors always raise an exception.
         :param **kwargs: Additional keyword arguments are passed to
                          :class:`MultipartParser`
+        :raises MultipartError: On parsing errors or exceeded limits.
     """
 
     forms, files = MultiDict(), MultiDict()
@@ -496,15 +767,15 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
     try:
         if environ.get("REQUEST_METHOD", "GET").upper() not in ("POST", "PUT"):
-            raise MultipartError("Request method other than POST or PUT.")
+            raise MultipartError("Request method other than POST or PUT")
         try:
             content_length = int(environ.get("CONTENT_LENGTH", "-1"))
         except ValueError:
-            raise MultipartError("Invalid Content-Length header.")
+            raise MultipartError("Invalid Content-Length header")
         content_type = environ.get("CONTENT_TYPE", "")
 
         if not content_type:
-            raise MultipartError("Missing Content-Type header.")
+            raise MultipartError("Missing Content-Type header")
 
         content_type, options = parse_options_header(content_type)
         stream = environ.get("wsgi.input") or BytesIO()
@@ -526,22 +797,22 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
             "application/x-www-form-urlencoded",
             "application/x-url-encoded",
         ):
-            mem_limit = kwargs.get("mem_limit", 2 ** 20)
+            mem_limit = kwargs.get("memory_limit", kwargs.get("mem_limit", 1024*64*128))
             if content_length > mem_limit:
-                raise MultipartError("Request too big. Increase mem_limit.")
+                raise MultipartError("Memory limit exceeded")
 
-            data = stream.read(mem_limit).decode(charset)
+            data = stream.read(mem_limit+1)
+            if len(data) > mem_limit:  # There is more, but we reached mem_limit
+                raise MultipartError("Memory limit exceeded")
 
-            if stream.read(1):  # There is more, but we reached mem_limit
-                raise MultipartError("Request too big. Increase mem_limit.")
-
+            data = data.decode(charset)
             data = parse_qs(data, keep_blank_values=True, encoding=charset)
 
             for key, values in data.items():
                 for value in values:
                     forms.append(key, value)
         else:
-            raise MultipartError("Unsupported content type.")
+            raise MultipartError("Unsupported Content-Type")
 
     except MultipartError:
         if strict:

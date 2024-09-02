@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 import unittest
-import os.path, tempfile
-
 import multipart as mp
+
 
 class testMultiDict(unittest.TestCase):
 
@@ -49,4 +48,4 @@ class testMultiDict(unittest.TestCase):
     def test_access_all(self):
         md = mp.MultiDict([("a", "1"), ("a", "2")])
         self.assertEqual(md.getall("a"), ["1", "2"])
-        self.assertEqual(list(md.iterallitems()), [("a", "1"),("a", "2")])
+        self.assertEqual(list(md.iterallitems()), [("a", "1"), ("a", "2")])
