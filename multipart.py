@@ -348,7 +348,7 @@ class MultipartPart(object):
     def __init__(self, buffer_size=2 ** 16, memfile_limit=2 ** 18, charset="latin1"):
         self.headerlist = []
         self.headers = None
-        self.file = False
+        self.file = None
         self.size = 0
         self._buf = b""
         self.disposition = None
@@ -359,7 +359,7 @@ class MultipartPart(object):
         self.memfile_limit = memfile_limit
         self.buffer_size = buffer_size
 
-    def feed(self, line, nl=""):
+    def feed(self, line, nl=b""):
         if self.file:
             return self.write_body(line, nl)
 
@@ -427,13 +427,19 @@ class MultipartPart(object):
 
     @property
     def value(self):
-        """ Data decoded with the specified charset """
+        """ Return the entire payload as decoded text.
+         
+            Warning, this may consume a lot of memory, check size first.
+        """
 
         return self.raw.decode(self.charset)
 
     @property
     def raw(self):
-        """ Raw binary data """
+        """ Return the entire payload as a raw byte string.
+         
+            Warning, this may consume a lot of memory, check size first.
+        """
         pos = self.file.tell()
         self.file.seek(0)
 
@@ -512,9 +518,9 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
             for part in MultipartParser(stream, boundary, content_length, **kwargs):
                 if part.filename or not part.is_buffered():
-                    files[part.name] = part
-                else:  # TODO: Big form-fields are in the files dict. really?
-                    forms[part.name] = part.value
+                    files.append(part.name, part)
+                else:  # TODO: Big form-fields go into the files dict. Really?
+                    forms.append(part.name, part.value)
 
         elif content_type in (
             "application/x-www-form-urlencoded",
@@ -522,18 +528,18 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
         ):
             mem_limit = kwargs.get("mem_limit", 2 ** 20)
             if content_length > mem_limit:
-                raise MultipartError("Request too big. Increase MAXMEM.")
+                raise MultipartError("Request too big. Increase mem_limit.")
 
             data = stream.read(mem_limit).decode(charset)
 
-            if stream.read(1):  # These is more that does not fit mem_limit
-                raise MultipartError("Request too big. Increase MAXMEM.")
+            if stream.read(1):  # There is more, but we reached mem_limit
+                raise MultipartError("Request too big. Increase mem_limit.")
 
             data = parse_qs(data, keep_blank_values=True, encoding=charset)
 
             for key, values in data.items():
                 for value in values:
-                    forms[key] = value
+                    forms.append(key, value)
         else:
             raise MultipartError("Unsupported content type.")
 
