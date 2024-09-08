@@ -15,7 +15,6 @@ authors = [
 dynamic = ["version"]
 urls = { repository = "http://github.com/defnull/multipart" }
 
-
 classifiers = [
     "Development Status :: 6 - Mature",
     "Intended Audience :: Developers",
@@ -27,6 +26,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "build",
+    "twine",
+]
+
 [tool.setuptools]
 py-modules = ["multipart"]
 platforms = ["any"]
@@ -34,6 +41,7 @@ platforms = ["any"]
 [tool.setuptools.dynamic]
 version = {attr = "multipart.__version__"}
 
-[tool.coverage.run]
-branch = true
-source = ["multipart", "test"]
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = [ "test" ]
+
