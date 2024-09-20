@@ -1,19 +1,17 @@
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["flit_core >=3.9,<4"]
+build-backend = "flit_core.buildapi"
 
 [project]
 name = "multipart"
 requires-python = ">=3.5"
+dynamic = ["version"]
 license = {file = "LICENSE"}
 description = "Parser for multipart/form-data"
 readme = "README.rst"
 authors = [
   {name = "Marcel Hellkamp", email = "marc@gsites.de"},
 ]
-
-dynamic = ["version"]
-urls = { repository = "http://github.com/defnull/multipart" }
 
 classifiers = [
     "Development Status :: 6 - Mature",
@@ -26,6 +24,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 
+[project.urls]
+Homepage = "https://pypi.org/project/multipart/"
+Repository = "https://github.com/defnull/multipart"
+
 [project.optional-dependencies]
 dev = [
     "pytest",
@@ -34,12 +36,11 @@ dev = [
     "twine",
 ]
 
-[tool.setuptools]
-py-modules = ["multipart"]
-platforms = ["any"]
-
-[tool.setuptools.dynamic]
-version = {attr = "multipart.__version__"}
+[tool.flit.sdist]
+include = [
+  "test/*.py",
+  "MAINTAINERS.rst"
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
