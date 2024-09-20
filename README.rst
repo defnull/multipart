@@ -124,7 +124,7 @@ the other parsers in this library:
 Changelog
 ---------
 
-* **1.0 (TBC)**
+* **1.0**
 
   * A completely new, fast, non-blocking ``PushMultipartParser`` parser, which
     now serves as the basis for all other parsers.
@@ -133,11 +133,11 @@ Changelog
   * Default disk and memory limits for ``MultipartParser`` increased, and
     multiple other limits added for finer control.
   * Undocumented APIs deprecated or removed, some of which were not strictly
-    private. This includes parameters for ``MultipartParser``, some
-    ``MultipartPart`` methods that should not be used by anyone but the parser
-    itself.
+    private. This includes parameters for ``MultipartParser`` and some
+    ``MultipartPart`` methods, but those should not be used by anyone but the
+    parser itself.
 
-* **0.2.5 (18.06.2024)**
+* **0.2.5**
 
   * Don't test semicolon separators in urlencoded data (#33)
   * Add python-requires directive, indicating Python 3.5 or later is required and preventing older Pythons from attempting to download this version (#32)
@@ -145,28 +145,28 @@ Changelog
   * Default value of ``copy_file`` should be ``2 ** 16``, not ``2 * 16`` (#41)
   * Update URL for Bottle (#42)
 
-* **0.2.4 (27.01.2021)**
+* **0.2.4**
 
   * Consistently decode non-utf8 URL-encoded form-data
 
-* **0.2.3 (20.11.2020)**
+* **0.2.3 **
 
   * Import MutableMapping from collections.abc (#23)
   * Fix a few more ResourceWarnings in the test suite (#24)
   * Allow stream to contain data before first boundary (#25)
 
-* **0.2.2 (04.09.2020)**
+* **0.2.2**
 
   * Fix #21 ResourceWarnings on Python 3
 
-* **0.2.1 (13.06.2020)**
+* **0.2.1**
 
   * Fix #20 empty payload
 
-* **0.2 (19.03.2019)**
+* **0.2**
 
   * Dropped support for Python versions below 3.6. Stay on 0.1 if you need Python 2.5+ support.
 
-* **0.1 (21.06.2010)**
+* **0.1**
 
   * First release
