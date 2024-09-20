@@ -1,6 +1,18 @@
 Parser for multipart/form-data
 ==============================
 
+.. image:: https://github.com/defnull/multipart/actions/workflows/test.yaml/badge.svg
+    :target: https://github.com/defnull/multipart/actions/workflows/test.yaml
+    :alt: Tests Status
+
+.. image:: https://img.shields.io/pypi/v/multipart.svg
+    :target: https://pypi.python.org/pypi/multipart/
+    :alt: Latest Version
+
+.. image:: https://img.shields.io/pypi/l/multipart.svg
+    :target: https://pypi.python.org/pypi/multipart/
+    :alt: License
+
 This module provides multiple parsers for RFC-7578 ``multipart/form-data``, both
 low-level for framework authors and high-level for WSGI application developers:
 
