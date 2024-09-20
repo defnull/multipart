@@ -149,7 +149,7 @@ Changelog
 
   * Consistently decode non-utf8 URL-encoded form-data
 
-* **0.2.3 **
+* **0.2.3**
 
   * Import MutableMapping from collections.abc (#23)
   * Fix a few more ResourceWarnings in the test suite (#24)
