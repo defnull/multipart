@@ -81,12 +81,12 @@ arrive, instead of waiting for the entire request to be parsed:
 
     def wsgi(environ, start_response):
       assert environ["REQUEST_METHOD"] == "POST"
-      ctype, copts = mp.parse_options_header(environ.get("CONTENT_TYPE", ""))
+      ctype, copts = parse_options_header(environ.get("CONTENT_TYPE", ""))
       boundary = copts.get("boundary")
       charset = copts.get("charset", "utf8")
       assert ctype == "multipart/form-data"
     
-      parser = mp.MultipartParser(environ["wsgi.input"], boundary, charset)
+      parser = MultipartParser(environ["wsgi.input"], boundary, charset)
       for part in parser:
         if part.filename:
           print(f"{part.name}: File upload ({part.size} bytes)")
@@ -104,20 +104,20 @@ the other parsers in this library:
 
 .. code-block:: python
 
-    from multipart import PushMultipartParser
+    from multipart import PushMultipartParser, MultipartSegment
 
     async def process_multipart(reader: asyncio.StreamReader, boundary: str):
       with PushMultipartParser(boundary) as parser:
         while not parser.closed:
           chunk = await reader.read(1024*46)
           for event in parser.parse(chunk):
-            if isinstance(event, list):
-              print("== Start of segment")
-              for header, value in event:
+            if isinstance(event, MultipartSegment):
+              print(f"== Start of segment: {event.name}")
+              for header, value in event.headerlist:
                 print(f"{header}: {value}")
-            elif isinstance(event, bytearray):
+            elif event:
               print(f"[{len(event)} bytes of data]")
-            elif event is None:
+            else:
               print("== End of segment")
 
 
