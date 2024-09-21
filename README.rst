@@ -109,16 +109,16 @@ the other parsers in this library:
     async def process_multipart(reader: asyncio.StreamReader, boundary: str):
       with PushMultipartParser(boundary) as parser:
         while not parser.closed:
-          chunk = await reader.read(1024*46)
-          for event in parser.parse(chunk):
-            if isinstance(event, MultipartSegment):
-              print(f"== Start of segment: {event.name}")
-              for header, value in event.headerlist:
+          chunk = await reader.read(1024*64)
+          for result in parser.parse(chunk):
+            if isinstance(result, MultipartSegment):
+              print(f"== Start of segment: {result.name}")
+              for header, value in result.headerlist:
                 print(f"{header}: {value}")
-            elif event:
-              print(f"[{len(event)} bytes of data]")
-            else:
-              print("== End of segment")
+            elif result:  # Result is a non-empty bytearray
+              print(f"[received {len(result)} bytes of data]")
+            else:         # Result is None
+              print(f"== End of segment")
 
 
 Changelog
