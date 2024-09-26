@@ -511,9 +511,9 @@ class MultipartSegment:
     def header(self, name: str, default=None):
         """Return the value of a header if present, or a default value."""
         compare = name.title()
-        for hname, value in self.headerlist[::-1]:
-            if hname == compare:
-                return value
+        for header in self.headerlist:
+            if header[0] == compare:
+                return header[1]
         if default is KeyError:
             raise KeyError(name)
         return default
