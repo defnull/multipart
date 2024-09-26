@@ -155,15 +155,14 @@ def parse_options_header(header, options=None):
     if ";" not in header:
         return header.lower().strip(), {}
 
-    content_type, tail = header.split(";", 1)
+    value, tail = header.split(";", 1)
     options = options or {}
 
     for match in _re_option.finditer(tail):
         key = match.group(1).lower()
-        value = header_unquote(match.group(2), key == "filename")
-        options[key] = value
+        options[key] = header_unquote(match.group(2), key == "filename")
 
-    return content_type, options
+    return value, options
 
 
 ##############################################################################
@@ -449,25 +448,25 @@ class MultipartSegment:
         self._fail = parser._fail
         self._size_limit = parser.max_segment_size
 
-
     def _add_headerline(self, line: bytearray):
         assert line and not self.name
+        parser = self._parser
 
         if line[0] in b" \t":  # Multi-line header value
-            if not self.headerlist or self._parser.strict:
+            if not self.headerlist or parser.strict:
                 raise self._fail("Unexpected segment header continuation")
             prev = ": ".join(self.headerlist.pop())
-            line = prev.encode(self._parser.header_charset) + b" " + line.strip()
+            line = prev.encode(parser.header_charset) + b" " + line.strip()
 
-        if len(line) > self._parser.max_header_size:
+        if len(line) > parser.max_header_size:
             raise self._fail("Maximum segment header length exceeded")
-        if len(self.headerlist) >= self._parser.max_header_count:
+        if len(self.headerlist) >= parser.max_header_count:
             raise self._fail("Maximum segment header count exceeded")
 
         try:
             name, col, value = line.partition(b":")
-            name = name.strip().decode(self._parser.header_charset)
-            value = value.strip().decode(self._parser.header_charset)
+            name = name.decode(parser.header_charset).strip()
+            value = value.decode(parser.header_charset).strip()
             if not col or not name:
                 raise self._fail("Malformed segment header")
             if " " in name or not name.isascii() or not name.isprintable():
