@@ -314,7 +314,11 @@ class PushMultipartParser:
                         self._state = _COMPLETE
                         break  # parsing complete
 
-                # delimiter found, skip data until we find one
+                    # Bad newline after valid delimiter -> Broken client
+                    if tail and tail[0:1] == b"\n":
+                        raise self._fail("Invalid line break after delimiter")
+
+                # Delimiter not found, skip data until we find one
                 offset = bufferlen - (d_len + 4)
                 break  # wait for more data
 
@@ -333,6 +337,8 @@ class PushMultipartParser:
                     offset += 2
                     continue
                 else:  # No CRLF found -> Ask for more data
+                    if buffer.find(b"\n", offset) != -1:
+                        raise self._fail("Invalid line break in segment header")
                     if bufferlen - offset > self.max_header_size:
                         raise self._fail("Maximum segment header length exceeded")
                     break  # wait for more data

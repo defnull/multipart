@@ -42,11 +42,11 @@ Features
 **Limitations:** This parser implements ``multipart/form-data`` as it is used by
 actual modern browsers and HTTP clients, which means:
 
-* Just ``multipart/form-data``, not suitable for email parsing
-* No ``multipart/mixed`` support (RFC 2388, deprecated in RFC 7578)
-* No ``encoded-word`` encoding (RFC 2047, no one uses that)
-* No ``base64`` or ``quoted-printable`` transfer encoding (not used)
-* No ``name=_charset_`` support (discouraged in RFC 7578)
+* Just ``multipart/form-data``, not suitable for email parsing.
+* No ``multipart/mixed`` support (deprecated in RFC 7578).
+* No ``base64`` or ``quoted-printable`` transfer encoding (deprecated in RFC 7578).
+* No ``encoded-word`` or ``name=_charset_`` encoding markers (discouraged in RFC 7578).
+* No support for clearly broken input (e.g. invalid line breaks or header names).
 
 Usage and examples
 ------------------
@@ -128,10 +128,14 @@ Changelog
 
   * A completely new, fast, non-blocking ``PushMultipartParser`` parser, which
     now serves as the basis for all other parsers.
+  * The new parser is stricter and rejects clearly broken input quicker, even in
+    non-strict mode (e.g. invalid line breaks or header names). This should not
+    affect data sent by actual browsers or HTTP clients.
   * Default charset for ``MultipartParser`` headers and text fields changed to
-    ``utf8``.
-  * Default disk and memory limits for ``MultipartParser`` increased, and
-    multiple other limits added for finer control.
+    ``utf8``, as recommended by W3C HTTP.
+  * Default disk and memory limits for ``MultipartParser`` increased, but
+    multiple other limits added for finer control. Check if the the new defaults
+    still fit your needs.
   * Undocumented APIs deprecated or removed, some of which were not strictly
     private. This includes parameters for ``MultipartParser`` and some
     ``MultipartPart`` methods, but those should not be used by anyone but the

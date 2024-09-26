@@ -95,6 +95,14 @@ class TestPushParser(unittest.TestCase):
         with self.assertMPE("Unexpected end of multipart stream"):
             self.parser.close()
 
+    def test_invalid_NL_delimiter(self):
+        with self.assertMPE("Invalid line break after delimiter"):
+            self.parse(b"--boundary\n")
+
+    def test_invalid_NL_header(self):
+        with self.assertMPE("Invalid line break in segment header"):
+            self.parse(b"--boundary\r\nfoo:bar\nbar:baz")
+
     def test_header_size_limit(self):
         self.reset(max_header_size=1024)
         self.parse(b"--boundary\r\n")
