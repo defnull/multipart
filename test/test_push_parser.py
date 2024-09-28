@@ -168,16 +168,30 @@ class TestPushParser(unittest.TestCase):
                 b"--boundary\r\ninvalid\xc3\x28:value\r\n\r\ndata\r\n--boundary--"
             )
 
-    def test_header_bad_disposition(self):
-        with self.assertMPE("Invalid Content-Disposition segment header"):
+    def test_header_wrong_segment_subtype(self):
+        with self.assertMPE("Invalid Content-Disposition segment header: Wrong type"):
             self.parse(
                 b"--boundary\r\nContent-Disposition: mixed\r\n\r\ndata\r\n--boundary--"
             )
-        self.reset()
-        with self.assertMPE("Invalid Content-Disposition segment header"):
-            self.parse(
-                b"--boundary\r\nContent-Disposition: form-data\r\n\r\ndata\r\n--boundary--"
-            )
+
+    def test_segment_empty_name(self):
+        self.parse(b"--boundary\r\n")
+        parts = self.parse(b"Content-Disposition: form-data; name\r\n\r\n")
+        self.assertEqual(parts[0].name, "")
+        self.parse(b"\r\n--boundary\r\n")
+        parts = self.parse(b"Content-Disposition: form-data; name=\r\n\r\n")
+        self.assertEqual(parts[0].name, "")
+        self.parse(b"\r\n--boundary\r\n")
+        parts = self.parse(b'Content-Disposition: form-data; name=""\r\n\r\n')
+        self.assertEqual(parts[0].name, "")
+
+    @assertStrict("Invalid Content-Disposition segment header: Missing name option")
+    def test_segment_missing_name(self, strict):
+        self.reset(strict=strict)
+        self.parse(b"--boundary\r\n")
+        parts = self.parse(b"Content-Disposition: form-data;\r\n\r\n")
+        print(parts)
+        self.assertEqual(parts[0].name, "")
 
     def test_segment_count_limit(self):
         self.reset(max_segment_count=1)
@@ -261,3 +275,4 @@ class TestPushParser(unittest.TestCase):
         self.assertEqual(part.filename, "bar.txt")
         with self.assertRaises(KeyError):
             part["Missing"]
+

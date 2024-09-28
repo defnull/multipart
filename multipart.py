@@ -407,7 +407,8 @@ class MultipartSegment:
 
     #: List of headers as name/value pairs with normalized (Title-Case) names.
     headerlist: List[Tuple[str, str]]
-    #: The required 'name' option of the Content-Disposition header.
+    #: The 'name' option of the Content-Disposition header. Always a string,
+    #: but may be empty.
     name: str
     #: The optional 'filename' option of the Content-Disposition header.
     filename: Optional[str]
@@ -449,7 +450,7 @@ class MultipartSegment:
         self._size_limit = parser.max_segment_size
 
     def _add_headerline(self, line: bytearray):
-        assert line and not self.name
+        assert line and self.name is None
         parser = self._parser
 
         if line[0] in b" \t":  # Multi-line header value
@@ -477,15 +478,17 @@ class MultipartSegment:
         self.headerlist.append((name.title(), value))
 
     def _close_headers(self):
-        assert not self.name and not self.complete
+        assert self.name is None
 
         cdisp = self.header("Content-Disposition")
         if not cdisp:
             raise self._fail("Missing Content-Disposition segment header")
         cdisp, args = parse_options_header(cdisp)
-        if cdisp != "form-data" or "name" not in args:
-            raise self._fail("Invalid Content-Disposition segment header")
-        self.name = args.get("name")
+        if cdisp != "form-data":
+            raise self._fail("Invalid Content-Disposition segment header: Wrong type")
+        if "name" not in args and self._parser.strict:
+            raise self._fail("Invalid Content-Disposition segment header: Missing name option")
+        self.name = args.get("name", "")
         self.filename = args.get("filename")
 
         content_type = self.header("Content-Type", "application/octet-stream")
@@ -495,7 +498,7 @@ class MultipartSegment:
         self._clen = int(self.header("Content-Length", -1))
 
     def _update_size(self, bytecount: int):
-        assert self.name and not self.complete
+        assert self.name is not None and not self.complete
         self.size += bytecount
         if self._clen >= 0 and self.size > self._clen:
             raise self._fail("Segment Content-Length exceeded")
@@ -503,7 +506,7 @@ class MultipartSegment:
             raise self._fail("Maximum segment size exceeded")
 
     def _mark_complete(self):
-        assert self.name and not self.complete
+        assert self.name is not None and not self.complete
         if self._clen >= 0 and self.size != self._clen:
             raise self._fail("Segment size does not match Content-Length header")
         self.complete = True
