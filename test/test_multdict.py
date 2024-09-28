@@ -22,6 +22,7 @@ class testMultiDict(unittest.TestCase):
         self.assertTrue("a" in md)
         self.assertFalse("b" in md)
         self.assertTrue("a" in md.keys())
+        self.assertEqual(list(md), ["a"])
         del md["a"]
         self.assertTrue("a" not in md)
 
