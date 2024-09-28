@@ -800,6 +800,7 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
                     files.append(part.name, part)
                 else:  # TODO: Big form-fields go into the files dict. Really?
                     forms.append(part.name, part.value)
+                    part.close()
 
         elif content_type in (
             "application/x-www-form-urlencoded",
@@ -824,8 +825,9 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
     except MultipartError:
         if strict:
-            for part in files.values():
-                part.close()
+            for _, part in files.iterallitems():
+                if hasattr(part, 'close'):
+                    part.close()
             raise
 
     return forms, files
