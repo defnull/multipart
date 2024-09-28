@@ -704,6 +704,7 @@ class MultipartPart(object):
         self.size = 0
         self.name = segment.name
         self.filename = segment.filename
+        #: Charset as defined in the segment header, or the parser default charset
         self.charset = segment.charset or charset
         self.headerlist = segment.headerlist
 
