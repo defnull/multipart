@@ -237,8 +237,8 @@ class PushMultipartParser:
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc):
-        self.close(check_complete=not exc)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close(check_complete=not exc_type)
 
     def parse(
         self, chunk: Union[bytes, bytearray]
