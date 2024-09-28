@@ -4,17 +4,15 @@ __pycache__/
 /build/
 /dist/
 /*.egg-info
+venv/
+.venv/
 
 # tests
 test.run
 html/
 /.cache/
 /.pytest_cache/
-/.venv
 
 # coverage
 .coverage
 /htmlcov
-
-#env
-env/
