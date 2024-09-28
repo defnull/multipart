@@ -491,9 +491,10 @@ class MultipartSegment:
         self.name = args.get("name", "")
         self.filename = args.get("filename")
 
-        content_type = self.header("Content-Type", "application/octet-stream")
-        self.content_type, args = parse_options_header(content_type)
-        self.charset = args.get("charset", self._parser.header_charset)
+        content_type = self.header("Content-Type")
+        if content_type is not None:
+            self.content_type, args = parse_options_header(content_type)
+            self.charset = args.get("charset")
 
         self._clen = int(self.header("Content-Length", -1))
 
@@ -682,7 +683,8 @@ class MultipartPart(object):
         self.disposition = segment.header("Content-Disposition")
         self.name = segment.name
         self.filename = segment.filename
-        self.content_type = segment.content_type
+        self.content_type = segment.content_type or (
+            "application/octet-stream" if self.filename else "text/plain")
         self.charset = segment.charset or charset
         self.headerlist = segment.headerlist
         self.headers = Headers(segment.headerlist)
