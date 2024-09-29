@@ -626,6 +626,7 @@ class MultipartParser(object):
         read = self.stream.read
         bufsize = self.buffer_size
         mem_used = disk_used = 0
+        readlimit = self.content_length
 
         part = None
         parser = PushMultipartParser(
@@ -640,7 +641,14 @@ class MultipartParser(object):
 
         with parser:
             while not parser.closed:
-                for event in parser.parse(read(bufsize)):
+
+                if readlimit >= 0:
+                    chunk = read(min(bufsize, readlimit))
+                    readlimit -= len(chunk)
+                else:
+                    chunk = read(bufsize)
+
+                for event in parser.parse(chunk):
                     if isinstance(event, MultipartSegment):
                         max_spool = min(
                             self.spool_limit, max(0, self.memory_limit - mem_used)
@@ -808,12 +816,16 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
             "application/x-url-encoded",
         ):
             mem_limit = kwargs.get("memory_limit", kwargs.get("mem_limit", 1024*64*128))
-            if content_length > mem_limit:
-                raise MultipartError("Memory limit exceeded")
-
-            data = stream.read(mem_limit+1)
-            if len(data) > mem_limit:  # There is more, but we reached mem_limit
-                raise MultipartError("Memory limit exceeded")
+            if content_length > -1:
+                if content_length > mem_limit:
+                    raise MultipartError("Memory limit exceeded")
+                data = stream.read(min(mem_limit, content_length))
+                if len(data) < content_length:
+                    raise MultipartError("Unexpected end of data stream")
+            else:
+                data = stream.read(mem_limit + 1)
+                if len(data) > mem_limit:
+                    raise MultipartError("Memory limit exceeded")
 
             data = data.decode(charset)
             data = parse_qs(data, keep_blank_values=True, encoding=charset)
