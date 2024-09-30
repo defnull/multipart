@@ -570,8 +570,8 @@ class MultipartParser(object):
         :param part_limit: Maximum number of segments to parse
         :param partsize_limit: Maximum size of a segment body
         :param spool_limit: Segments up to this size are buffered in memory,
-            larger segments are spooled to temporary files on disk.
-        :param memory_limit: Maximum size of all memory-buffered segments
+            larger segments are buffered in temporary files on disk.
+        :param memory_limit: Maximum size of all memory-buffered segments.
         :param disk_limit: Maximum size of all disk-buffered segments
 
         :param memfile_limit: Deprecated alias for `spool_limit`.
@@ -587,8 +587,8 @@ class MultipartParser(object):
         self.headersize_limit = headersize_limit
         self.part_limit = part_limit
         self.partsize_limit = partsize_limit
-        self.spool_limit = memfile_limit or spool_limit
         self.memory_limit = mem_limit or memory_limit
+        self.spool_limit = min(memfile_limit or spool_limit, self.memory_limit)
         self.disk_limit = disk_limit
 
         self._done = []
@@ -650,12 +650,9 @@ class MultipartParser(object):
 
                 for event in parser.parse(chunk):
                     if isinstance(event, MultipartSegment):
-                        max_spool = min(
-                            self.spool_limit, max(0, self.memory_limit - mem_used)
-                        )
                         part = MultipartPart(
                             buffer_size=self.buffer_size,
-                            memfile_limit=max_spool,
+                            memfile_limit=self.spool_limit,
                             charset=self.charset,
                             segment=event,
                         )
@@ -686,7 +683,7 @@ class MultipartPart(object):
     ):
         self._segment = segment
         #: A file-like object holding the fields content
-        self.file = tempfile.SpooledTemporaryFile(max_size=memfile_limit)
+        self.file = BytesIO()
         self.size = 0
         self.disposition = segment.header("Content-Disposition")
         self.name = segment.name
@@ -703,13 +700,22 @@ class MultipartPart(object):
     def _write(self, chunk):
         self.size += len(chunk)
         self.file.write(chunk)
+        if self.size > self.memfile_limit:
+            old = self.file
+            self.file = tempfile.TemporaryFile()
+            self.file.write(old.getvalue())
+            self._write = self._write_nocheck
+
+    def _write_nocheck(self, chunk):
+        self.size += len(chunk)
+        self.file.write(chunk)
 
     def _mark_complete(self):
         self.file.seek(0)
 
     def is_buffered(self):
         """Return true if the data is fully buffered in memory."""
-        return isinstance(self.file._file, BytesIO)
+        return isinstance(self.file, BytesIO)
 
     @property
     def value(self):
