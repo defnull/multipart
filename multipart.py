@@ -262,6 +262,8 @@ class PushMultipartParser:
         Format errors or exceeded limits will trigger :exc:`MultipartError`.
         """
 
+        assert isinstance(chunk, (bytes, bytearray))
+
         if not chunk:
             self.close()
             return
