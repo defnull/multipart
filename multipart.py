@@ -168,17 +168,17 @@ def header_unquote(val, filename=False):
 
 
 def parse_options_header(header, options=None):
-    if ";" not in header:
+    value, sep, tail = header.partition(";")
+    if not sep:
         return header.lower().strip(), {}
 
-    value, tail = header.split(";", 1)
     options = options or {}
-
     for match in _re_option.finditer(tail):
-        key = match.group(1).lower()
-        options[key] = header_unquote(match.group(2), key == "filename")
+        key, val = match.groups()
+        key = key.lower()
+        options[key] = header_unquote(val, key == "filename")
 
-    return value, options
+    return value.lower(), options
 
 
 ##############################################################################
