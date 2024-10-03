@@ -483,9 +483,8 @@ class MultipartSegment:
             raise self._fail("Maximum segment header count exceeded")
 
         try:
-            name, col, value = line.partition(b":")
-            name = name.decode(parser.header_charset).strip()
-            value = value.decode(parser.header_charset).strip()
+            name, col, value = line.decode(parser.header_charset).partition(":")
+            name = name.strip()
             if not col or not name:
                 raise self._fail("Malformed segment header")
             if " " in name or not name.isascii() or not name.isprintable():
@@ -493,7 +492,7 @@ class MultipartSegment:
         except UnicodeDecodeError as err:
             raise self._fail("Segment header failed to decode")
 
-        self.headerlist.append((name.title(), value))
+        self.headerlist.append((name.title(), value.strip()))
 
     def _close_headers(self):
         assert self.name is None
