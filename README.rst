@@ -124,6 +124,20 @@ the other parsers in this library:
 Changelog
 ---------
 
+* **1.1**
+
+  * Some of these fixes changed behavior to match documentation or specification,
+    none of them should be a surprise. Existing apps should be able to upgrade
+    without change. 
+  * fix: Fail faster on input with invalid line breaks (#55)
+  * fix: Allow empty segment names (#56)
+  * fix: Avoid ResourceWarning when using parse_form_data (#57)
+  * fix: MultipartPart now always has a sensible content type.
+  * fix: Actually check parser state on context manager exit.
+  * fix: Honor Content-Length header, if present.
+  * perf: Reduce overhead for small segments (-21%)
+  * perf: Reduce write overhead for large uploads (-2%)
+
 * **1.0**
 
   * A completely new, fast, non-blocking ``PushMultipartParser`` parser, which
