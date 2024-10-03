@@ -497,23 +497,23 @@ class MultipartSegment:
     def _close_headers(self):
         assert self.name is None
 
-        cdisp = self.header("Content-Disposition")
-        if not cdisp:
+        for h,v in self.headerlist:
+            if h == "Content-Disposition":
+                dtype, args = parse_options_header(v)
+                if dtype != "form-data":
+                    raise self._fail("Invalid Content-Disposition segment header: Wrong type")
+                if "name" not in args and self._parser.strict:
+                    raise self._fail("Invalid Content-Disposition segment header: Missing name option")
+                self.name = args.get("name", "")
+                self.filename = args.get("filename")
+            elif h == "Content-Type":
+                self.content_type, args = parse_options_header(v)
+                self.charset = args.get("charset")
+            elif h == "Content-Length":
+                self._clen = int(self.header("Content-Length", -1))
+
+        if self.name is None:
             raise self._fail("Missing Content-Disposition segment header")
-        cdisp, args = parse_options_header(cdisp)
-        if cdisp != "form-data":
-            raise self._fail("Invalid Content-Disposition segment header: Wrong type")
-        if "name" not in args and self._parser.strict:
-            raise self._fail("Invalid Content-Disposition segment header: Missing name option")
-        self.name = args.get("name", "")
-        self.filename = args.get("filename")
-
-        content_type = self.header("Content-Type")
-        if content_type is not None:
-            self.content_type, args = parse_options_header(content_type)
-            self.charset = args.get("charset")
-
-        self._clen = int(self.header("Content-Length", -1))
 
     def _update_size(self, bytecount: int):
         assert self.name is not None and not self.complete
