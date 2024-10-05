@@ -35,7 +35,7 @@ Features
 
 * Pure python single file module with no dependencies.
 * 100% test coverage. Tested with inputs as seen from actual browsers and HTTP clients.
-* Parses multiple GB/s on modern hardware (quick tests, no proper benchmark).
+* Parses multiple GB/s on modern hardware (see `benchmarks <https://github.com/defnull/multipart_bench>`_).
 * Quickly rejects malicious or broken inputs and emits useful error messages.
 * Enforces configurable memory and disk resource limits to prevent DoS attacks.
 
