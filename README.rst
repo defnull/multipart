@@ -184,3 +184,10 @@ all the other parsers in this library:
             else:         # Result is None
               print(f"== End of segment")
 
+
+License
+=======
+
+.. __: https://github.com/defnull/multipart/raw/master/LICENSE
+
+Code and documentation are available under MIT License (see LICENSE__).
