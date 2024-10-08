@@ -32,6 +32,9 @@ Installation
 
 ``pip install multipart``
 
+Warning, there is a different PyPi project called ``python-multipart`` which installs
+itself as ``multipart`` instead of ``python_multipart`` and causes import name conflicts.
+See `this issue <https://github.com/defnull/multipart/issues/53>`_ for details.
 
 Features
 ========
@@ -88,7 +91,8 @@ buffered to temporary files on disk if they exceed a certain size. The default
 limits should be fine for most use cases, but can be configured if you need to.
 See ``MultipartParser`` for details.
 
-.. rubric:: Flask, Bottle & Co
+Flask, Bottle & Co
+^^^^^^^^^^^^^^^^^^
 
 Most WSGI web framerworks already have multipart functionality built in, but
 you may still get better throughput for large files (or better limits control)
@@ -98,7 +102,8 @@ by switching parsers:
 
     forms, files = multipart.parse_form_data(flask.request.environ)
 
-.. rubric:: Legacy CGI
+Legacy CGI
+^^^^^^^^^^
 
 If you are in the unfortunate position to have to rely on CGI, but can't use
 ``cgi.FieldStorage`` anymore, it's possible to build a minimal WSGI environment
