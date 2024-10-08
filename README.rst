@@ -1,3 +1,4 @@
+==============================
 Parser for multipart/form-data
 ==============================
 
@@ -25,13 +26,15 @@ low-level for framework authors and high-level for WSGI application developers:
   and ``application/x-www-form-urlencoded`` form submissions from a
   `WSGI <https://peps.python.org/pep-3333/>`_ environment.
 
+
 Installation
-------------
+============
 
 ``pip install multipart``
 
+
 Features
---------
+========
 
 * Pure python single file module with no dependencies.
 * 100% test coverage. Tested with inputs as seen from actual browsers and HTTP clients.
@@ -48,8 +51,17 @@ actual modern browsers and HTTP clients, which means:
 * No ``encoded-word`` or ``name=_charset_`` encoding markers (discouraged in RFC 7578).
 * No support for clearly broken input (e.g. invalid line breaks or header names).
 
-Usage and examples
-------------------
+
+Usage and Examples
+==================
+
+Here are some basic examples for the most common use cases. There are more
+parameters and features available than shown here, so check out the docstrings
+(or your IDEs built-in help) to get a full picture. 
+
+
+Helper function for WSGI or CGI
+-------------------------------
 
 For WSGI application developers we strongly suggest using the ``parse_form_data``
 helper function. It accepts a WSGI ``environ`` dictionary and parses both types
@@ -64,16 +76,51 @@ instances in return, one for text fields and the other for file uploads:
     def wsgi(environ, start_response):
       if environ["REQUEST_METHOD"] == "POST":
         forms, files = parse_form_data(environ)
-        
-        title = forms["title"]    # string
-        upload = files["upload"]  # MultipartPart
+
+        title  = forms["title"]  # string
+        upload = files["upload"] # MultipartPart
         upload.save_as(...)
 
-The ``parse_form_data`` helper function internally uses ``MultipartParser``, a
-streaming parser that reads from a ``multipart/form-data`` encoded binary data
-stream and emits ``MultipartPart`` instances as soon as a part is fully parsed.
-This is most useful if you want to consume the individual parts as soon as they
-arrive, instead of waiting for the entire request to be parsed:
+Note that form fields that are too large to fit into memory will end up as
+``MultipartPart`` instances in the ``files`` dict instead. This is to protect
+your app from running out of memory or crashing. ``MultipartPart`` instances are
+buffered to temporary files on disk if they exceed a certain size. The default
+limits should be fine for most use cases, but can be configured if you need to.
+See ``MultipartParser`` for details.
+
+.. rubric:: Flask, Bottle & Co
+
+Most WSGI web framerworks already have multipart functionality built in, but
+you may still get better throughput for large files (or better limits control)
+by switching parsers: 
+
+.. code-block:: python
+
+    forms, files = multipart.parse_form_data(flask.request.environ)
+
+.. rubric:: Legacy CGI
+
+If you are in the unfortunate position to have to rely on CGI, but can't use
+``cgi.FieldStorage`` anymore, it's possible to build a minimal WSGI environment
+from a CGI environment and use ``parse_form_data`` instead. This is *not*
+recommended though.
+
+.. code-block:: python
+
+    import sys, os, multipart
+
+    environ = dict(os.environ.items())
+    environ['wsgi.input'] = sys.stdin.buffer
+    forms, files = multipart.parse_form_data(environ)
+
+
+Stream parser: ``MultipartParser``
+----------------------------------
+
+The ``parse_form_data`` helper may be convenient, but it expects a WSGI
+environment and parses the entire request in one go before it returns any
+results. Using ``MultipartParser`` directly gives you more control and also
+allows you to process ``MultipartPart`` instances as soon as they arrive:
 
 .. code-block:: python
 
@@ -81,12 +128,16 @@ arrive, instead of waiting for the entire request to be parsed:
 
     def wsgi(environ, start_response):
       assert environ["REQUEST_METHOD"] == "POST"
-      ctype, copts = parse_options_header(environ.get("CONTENT_TYPE", ""))
-      boundary = copts.get("boundary")
-      charset = copts.get("charset", "utf8")
-      assert ctype == "multipart/form-data"
-    
-      parser = MultipartParser(environ["wsgi.input"], boundary, charset)
+
+      content_type = environ["CONTENT_TYPE"]
+      content_type, content_params = parse_options_header(content_type)
+      assert content_type == "multipart/form-data"
+
+      stream = environ["wsgi.input"]
+      boundary = content_params.get("boundary")
+      charset = content_params.get("charset", "utf8")
+
+      parser = MultipartParser(stream, boundary, charset)
       for part in parser:
         if part.filename:
           print(f"{part.name}: File upload ({part.size} bytes)")
@@ -96,11 +147,15 @@ arrive, instead of waiting for the entire request to be parsed:
         else:
           print(f"{part.name}: Test field, but too big to print :/")
 
-The ``MultipartParser`` handles IO and file buffering for you, but does so using
+
+Non-blocking parser: ``PushMultipartParser`` 
+--------------------------------------------
+
+The ``MultipartParser`` handles IO and file buffering for you, but relies on
 blocking APIs. If you need absolute control over the parsing process and want to
 avoid blocking IO at all cost, then have a look at ``PushMultipartParser``, the
-low-level non-blocking incremental ``multipart/form-data`` parser that powers all
-the other parsers in this library:
+low-level non-blocking incremental ``multipart/form-data`` parser that powers
+all the other parsers in this library:
 
 .. code-block:: python
 
@@ -109,10 +164,14 @@ the other parsers in this library:
     async def process_multipart(reader: asyncio.StreamReader, boundary: str):
       with PushMultipartParser(boundary) as parser:
         while not parser.closed:
+
           chunk = await reader.read(1024*64)
           for result in parser.parse(chunk):
+
             if isinstance(result, MultipartSegment):
               print(f"== Start of segment: {result.name}")
+              if result.filename:
+                print(f"== Client-side filename: {result.filename}")
               for header, value in result.headerlist:
                 print(f"{header}: {value}")
             elif result:  # Result is a non-empty bytearray
@@ -122,7 +181,7 @@ the other parsers in this library:
 
 
 Changelog
----------
+=========
 
 * **1.1**
 
