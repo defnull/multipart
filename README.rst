@@ -60,7 +60,7 @@ Usage and Examples
 
 Here are some basic examples for the most common use cases. There are more
 parameters and features available than shown here, so check out the docstrings
-(or your IDEs built-in help) to get a full picture. 
+(or your IDEs built-in help) to get a full picture.
 
 
 Helper function for WSGI or CGI
@@ -107,8 +107,9 @@ Legacy CGI
 
 If you are in the unfortunate position to have to rely on CGI, but can't use
 ``cgi.FieldStorage`` anymore, it's possible to build a minimal WSGI environment
-from a CGI environment and use ``parse_form_data`` instead. This is *not*
-recommended though.
+from a CGI environment and use that with ``parse_form_data``. This is not a real
+WSGI environment, but it contains enough information for ``parse_form_data``
+to do its job. Do not forget to add proper error handling. 
 
 .. code-block:: python
 
