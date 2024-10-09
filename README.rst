@@ -94,7 +94,7 @@ See ``MultipartParser`` for details.
 Flask, Bottle & Co
 ^^^^^^^^^^^^^^^^^^
 
-Most WSGI web framerworks already have multipart functionality built in, but
+Most WSGI web frameworks already have multipart functionality built in, but
 you may still get better throughput for large files (or better limits control)
 by switching parsers: 
 
