@@ -509,8 +509,8 @@ class MultipartSegment:
             elif h == "Content-Type":
                 self.content_type, args = parse_options_header(v)
                 self.charset = args.get("charset")
-            elif h == "Content-Length":
-                self._clen = int(self.header("Content-Length", -1))
+            elif h == "Content-Length" and v.isdecimal():
+                self._clen = int(v)
 
         if self.name is None:
             raise self._fail("Missing Content-Disposition segment header")
