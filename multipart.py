@@ -17,10 +17,9 @@ __all__ = ["MultipartError", "parse_form_data", "MultipartParser", "MultipartPar
 
 import re
 from io import BytesIO
-from typing import Iterator, Union, Optional, Tuple, List
+from typing import Iterator, Union, Optional, Tuple, List, MutableMapping, TypeVar
 from urllib.parse import parse_qs
 from wsgiref.headers import Headers
-from collections.abc import MutableMapping as DictMixin
 import tempfile
 import functools
 
@@ -30,8 +29,10 @@ import functools
 ##############################################################################
 # Some of these were copied from bottle: https://bottlepy.org
 
+_V = TypeVar("V")
+_D = TypeVar("D")
 
-class MultiDict(DictMixin):
+class MultiDict(MutableMapping[str, _V]):
     """ A dict that stores multiple values per key. Most dict methods return the
         last value by default. There are special methods to get all values.
     """
@@ -51,7 +52,7 @@ class MultiDict(DictMixin):
     def __len__(self):
         return len(self.dict)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[_V]:
         return iter(self.dict)
 
     def __contains__(self, key):
@@ -66,10 +67,10 @@ class MultiDict(DictMixin):
     def __repr__(self):
         return repr(self.dict)
 
-    def keys(self):
+    def keys(self) -> Iterator[str]:
         return self.dict.keys()
 
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> _V:
         return self.get(key, KeyError, -1)
 
     def __setitem__(self, key, value):
@@ -81,16 +82,16 @@ class MultiDict(DictMixin):
     def replace(self, key, value):
         self.dict[key] = [value]
 
-    def getall(self, key):
+    def getall(self, key) -> List[_V]:
         return self.dict.get(key) or []
 
-    def get(self, key, default=None, index=-1):
+    def get(self, key, default:_D=None, index=-1) -> Union[_V,_D]:
         if key not in self.dict and default != KeyError:
             return [default][index]
 
         return self.dict[key][index]
 
-    def iterallitems(self):
+    def iterallitems(self) -> Iterator[Tuple[str, _V]]:
         """ Yield (key, value) keys, but for all values. """
         for key, values in self.dict.items():
             for value in values:
@@ -611,7 +612,7 @@ class MultipartParser(object):
         self._done = []
         self._part_iter = None
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator["MultipartPart"]:
         """Iterate over the parts of the multipart message."""
         if not self._part_iter:
             self._part_iter = self._iterparse()
@@ -627,7 +628,7 @@ class MultipartParser(object):
         """Returns a list with all parts of the multipart message."""
         return list(self)
 
-    def get(self, name, default=None):
+    def get(self, name, default: _D = None):
         """Return the first part with that name or a default value."""
         for part in self:
             if name == part.name:
@@ -788,7 +789,9 @@ class MultipartPart(object):
 ##############################################################################
 
 
-def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
+def parse_form_data(
+    environ, charset="utf8", strict=False, **kwargs
+) -> Tuple[MultiDict[str], MultiDict[MultipartPart]]:
     """ Parses both types of form data (multipart and url-encoded) from a WSGI
         environment and returns a (forms, files) tuple. Both are instances of 
         :class:`MultiDict` and may contain multiple values per key.
