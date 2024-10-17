@@ -23,6 +23,21 @@ from wsgiref.headers import Headers
 from collections.abc import MutableMapping as DictMixin
 import tempfile
 import functools
+import warnings
+
+try:
+    from warnings import deprecated
+except ImportError:
+    from functools import wraps
+    def deprecated(reason):
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*a, **ka):
+                warnings.warn(reason, category=DeprecationWarning, stacklevel=2)
+                return func(*a, **ka)
+            func.__deprecated__ = wrapper.__deprecated__ = reason
+            return wrapper
+        return decorator
 
 
 ##############################################################################
@@ -147,14 +162,26 @@ _option = r'(?:;|^)\s*([^%s]+)\s*=\s*(%s)' % (_special, _value)
 _re_option = re.compile(_option)  # key=value part of an Content-Type like header
 
 
+@deprecated("Use content_disposition_quote() instead")
 def header_quote(val):
+    """ (Deprecated) Quote header option values if necessary.
+
+        Note: This is NOT the way modern browsers quote field names or filenames
+        in Content-Disposition headers. See :func:`content_disposition_quote`
+    """
     if not _re_special.search(val):
         return val
 
     return '"' + val.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+@deprecated("Use content_disposition_unquote() instead")
 def header_unquote(val, filename=False):
+    """ (Deprecated) Unquote header option values.
+
+        Note: This is NOT the way modern browsers quote field names or filenames
+        in Content-Disposition headers. See :func:`content_disposition_unquote`
+    """
     if val[0] == val[-1] == '"':
         val = val[1:-1]
 
@@ -167,7 +194,44 @@ def header_unquote(val, filename=False):
     return val
 
 
-def parse_options_header(header, options=None):
+def content_disposition_quote(val):
+    """ Quote field names or filenames for Content-Disposition headers the
+        same way modern browsers do it (see WHATWG HTML5 specification).
+    """
+    val = val.replace("\r", "%0D").replace("\n", "%0A").replace('"', "%22")
+    return '"' + val + '"'
+
+
+def content_disposition_unquote(val, filename=False):
+    """ Unquote field names or filenames from Content-Disposition headers.
+
+        Legacy quoting mechanisms are detected to some degree and also supported,
+        but there are rare ambiguous edge cases where we have to guess. If in
+        doubt, this function assumes a modern browser and follows the WHATWG
+        HTML5 specification.
+    """
+
+    # Edge case: If the value contains two backslashes but no quote, we cannot
+    # know for sure if this is legacy or modern style. We keep both backslashes
+    # in this case (modern style).
+
+    if '"' == val[0] == val[-1]:
+        val = val[1:-1]
+        if '\\"' in val:  # Legacy backslash-escaped quoted strings
+            val = val.replace("\\\\", "\\").replace('\\"', '"')
+        elif "%" in val:  # Modern (HTML5) limited percent-encoding
+            val = val.replace("%0D", "\r").replace("%0A", "\n").replace("%22", '"')
+        # ie6/windows bug: full path instead of just filename
+        if filename and (val[1:3] == ":\\" or val[:2] == "\\\\"):
+            val = val.rpartition("\\")[-1]
+    elif "%" in val:  # Modern (HTML5) limited percent-encoding
+        val = val.replace("%0D", "\r").replace("%0A", "\n").replace("%22", '"')
+    return val
+
+
+def parse_options_header(header, options=None, _unquote=content_disposition_unquote):
+    """ Parse Content-Disposition (or similar) headers into a primary value 
+        and an options-dict. """
     value, sep, tail = header.partition(";")
     if not sep:
         return header.lower().strip(), {}
@@ -176,7 +240,7 @@ def parse_options_header(header, options=None):
     for match in _re_option.finditer(tail):
         key, val = match.groups()
         key = key.lower()
-        options[key] = header_unquote(val, key == "filename")
+        options[key] = _unquote(val, key == "filename")
 
     return value.lower(), options
 
