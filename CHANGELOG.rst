@@ -2,6 +2,13 @@
 Changelog
 =========
 
+Release 1.2
+===========
+
+* fix: Implement modern quoting rules for field names and filenames (#60)
+* feat: Added specialized `content_disposition_[un]quote` functions.
+* feat: `parse_options_header` can now use different unquote functions.
+
 Release 1.1
 ===========
 
