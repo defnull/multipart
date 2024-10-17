@@ -63,10 +63,12 @@ class PushTestBase(unittest.TestCase):
             yield current, b''.join(data)
 
     def get_segment(self, index_or_name):
+        allnames = []
         for i, (segment, body) in enumerate(self.compact_events()):
+            allnames.append(segment.name)
             if index_or_name == i or index_or_name == segment.name:
                 return segment, body
-        self.fail(f"Segment not found: {index_or_name}")
+        self.fail(f"Segment {index_or_name!r} not found in {allnames!r}")
 
 
 class TestPushParser(PushTestBase):
@@ -846,3 +848,25 @@ class TestWerkzeugExamples(PushTestBase):
                 self.assertEqual(segment.filename, None)
                 self.assertEqual(segment.content_type, None)
                 self.assertEqual(body.decode(segment.charset or 'utf8'), forms[field])
+
+
+
+class TestRealWorldExamples(PushTestBase):
+    def test_special_characters(self):
+        """ Test the ultimate segment name/filename from hell. """
+        teststring = 'test \\ \\\\ ; ö " = ;'
+        firefox_131 = ['---------------------------3697486332756351920303607403',
+b'-----------------------------3697486332756351920303607403\r\nContent-Disposition: form-data; name="test \\ \\\\ ; \xc3\xb6 %22 = ;"; filename="test \\ \\\\ ; \xc3\xb6 %22 = ;"\r\nContent-Type: application/octet-stream\r\n\r\ntest \\ \\\\ ; \xc3\xb6 " = ;\r\n-----------------------------3697486332756351920303607403--\r\n']
+        chrome_129 = ["----WebKitFormBoundary9duA54BXJUGUymtb", 
+b'------WebKitFormBoundary9duA54BXJUGUymtb\r\nContent-Disposition: form-data; name="test \\ \\\\ ; \xc3\xb6 %22 = ;"; filename="test \\ \\\\ ; \xc3\xb6 %22 = ;"\r\nContent-Type: application/octet-stream\r\n\r\ntest \\ \\\\ ; \xc3\xb6 " = ;\r\n------WebKitFormBoundary9duA54BXJUGUymtb--\r\n']
+
+        for boundary, body in [firefox_131, chrome_129]:
+            print(repr(boundary))
+            print(repr(body))
+            self.reset(boundary=boundary, strict=True, header_charset='utf8')
+            self.parse(body)
+            segment, body = self.get_segment(teststring)
+            self.assertEqual(segment.name, teststring)
+            self.assertEqual(segment.filename, teststring)
+            self.assertEqual(body, teststring.encode("utf8"))
+

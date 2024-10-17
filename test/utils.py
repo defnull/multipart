@@ -48,7 +48,7 @@ class BaseParserTest(unittest.TestCase):
         line = to_bytes(header) + b': ' + to_bytes(value)
         for opt, val in opts.items():
             if val is not None:
-                line += b"; " + to_bytes(opt) + b'=' + to_bytes(multipart.header_quote(val))
+                line += b"; " + to_bytes(opt) + b'=' + to_bytes(multipart.content_disposition_quote(val))
         self.write(line + b'\r\n')
 
     def write_field(self, name, data, filename=None, content_type=None):

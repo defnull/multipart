@@ -184,6 +184,11 @@ _option = r'; *(%s) *= *(%s)' % (_token, _value)
 _re_option = re.compile(_option)
 
 def header_quote(val):
+    """ Quote header option values if necessary.
+
+        Note: This is NOT the way modern browsers quote field names or filenames
+        in Content-Disposition headers. See :func:`content_disposition_quote`
+    """
     if _re_istoken.match(val):
         return val
 
@@ -191,6 +196,11 @@ def header_quote(val):
 
 
 def header_unquote(val, filename=False):
+    """ Unquote header option values.
+
+        Note: This is NOT the way modern browsers quote field names or filenames
+        in Content-Disposition headers. See :func:`content_disposition_unquote`
+    """
     if val[0] == val[-1] == '"':
         val = val[1:-1]
 
@@ -203,7 +213,45 @@ def header_unquote(val, filename=False):
     return val
 
 
-def parse_options_header(header, options=None):
+def content_disposition_quote(val):
+    """ Quote field names or filenames for Content-Disposition headers the
+        same way modern browsers do it (see WHATWG HTML5 specification).
+    """
+    val = val.replace("\r", "%0D").replace("\n", "%0A").replace('"', "%22")
+    return '"' + val + '"'
+
+
+def content_disposition_unquote(val, filename=False):
+    """ Unquote field names or filenames from Content-Disposition headers.
+
+        Legacy quoting mechanisms are detected to some degree and also supported,
+        but there are rare ambiguous edge cases where we have to guess. If in
+        doubt, this function assumes a modern browser and follows the WHATWG
+        HTML5 specification (limited percent-encoding, no backslash-encoding).
+    """
+
+    if '"' == val[0] == val[-1]:
+        val = val[1:-1]
+        if '\\"' in val:  # Legacy backslash-escaped quoted strings
+            val = val.replace("\\\\", "\\").replace('\\"', '"')
+        elif "%" in val:  # Modern (HTML5) limited percent-encoding
+            val = val.replace("%0D", "\r").replace("%0A", "\n").replace("%22", '"')
+        # ie6/windows bug: full path instead of just filename
+        if filename and (val[1:3] == ":\\" or val[:2] == "\\\\"):
+            val = val.rpartition("\\")[-1]
+    elif "%" in val:  # Modern (HTML5) limited percent-encoding
+        val = val.replace("%0D", "\r").replace("%0A", "\n").replace("%22", '"')
+    return val
+
+
+def parse_options_header(header, options=None, unquote=header_unquote):
+    """ Parse Content-Type (or similar) headers into a primary value 
+        and an options-dict.
+
+        Note: For Content-Disposition headers you need a different unquote
+        function. See `content_disposition_unquote`.
+
+    """
     i = header.find(";")
     if i < 0:
         return header.lower().strip(), {}
@@ -211,7 +259,7 @@ def parse_options_header(header, options=None):
     options = options or {}
     for key, val in _re_option.findall(header, i):
         key = key.lower()
-        options[key] = header_unquote(val, key == "filename")
+        options[key] = unquote(val, key == "filename")
 
     return header[:i].lower().strip(), options
 
@@ -543,7 +591,7 @@ class MultipartSegment:
 
         for h,v in self.headerlist:
             if h == "Content-Disposition":
-                dtype, args = parse_options_header(v)
+                dtype, args = parse_options_header(v, unquote=content_disposition_unquote)
                 if dtype != "form-data":
                     raise ParserError("Invalid Content-Disposition segment header: Wrong type")
                 if "name" not in args and self._parser.strict:
