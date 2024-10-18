@@ -139,16 +139,17 @@ class _cached_property:
 # -------------
 
 
-_special = re.escape('()<>@,;:"\\/[]?={} \t')
-_re_special = re.compile(r'[%s]' % _special)
-_quoted_string = r'"(?:\\.|[^"])*"'  # Quoted string
-_value = r'(?:[^%s]+|%s)' % (_special, _quoted_string)  # Save or quoted string
-_option = r'(?:;|^)\s*([^%s]+)\s*=\s*(%s)' % (_special, _value)
-_re_option = re.compile(_option)  # key=value part of an Content-Type like header
-
+# ASCII minus control or special chars
+_token="[a-zA-Z0-9-!#$%&'*+.^_`|~]+" 
+_re_istoken = re.compile("^%s$" % _token, re.ASCII)
+# A token or quoted-string (simple qs | token | slow qs)
+_value = r'"[^\\"]*"|%s|"(?:\\.|[^"])*"' % _token
+# A "; key=value" pair from content-disposition header
+_option = r'; *(%s) *= *(%s)' % (_token, _value)
+_re_option = re.compile(_option)
 
 def header_quote(val):
-    if not _re_special.search(val):
+    if _re_istoken.match(val):
         return val
 
     return '"' + val.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -168,17 +169,16 @@ def header_unquote(val, filename=False):
 
 
 def parse_options_header(header, options=None):
-    value, sep, tail = header.partition(";")
-    if not sep:
+    i = header.find(";")
+    if i < 0:
         return header.lower().strip(), {}
 
     options = options or {}
-    for match in _re_option.finditer(tail):
-        key, val = match.groups()
+    for key, val in _re_option.findall(header, i):
         key = key.lower()
         options[key] = header_unquote(val, key == "filename")
 
-    return value.lower(), options
+    return header[:i].lower().strip(), options
 
 
 ##############################################################################
