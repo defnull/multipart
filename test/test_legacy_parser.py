@@ -185,3 +185,14 @@ class TestMultipartParser(BaseParserTest):
 
         # Large content length (we don't care)
         list(self.parser(content_length=clen+1))
+
+    def test_segment_close_twice(self):
+        self.write_field("file1", 'x'*1024, filename="foo.bin")
+        self.write_end()
+
+        # Correct content length
+        file1 = self.parser().get("file1")
+        self.assertFalse(file1.file.closed)
+        file1.close()
+        self.assertFalse(file1.file)
+        file1.close() # Do nothing

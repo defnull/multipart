@@ -17,7 +17,7 @@ test: venv
 
 .PHONY: coverage
 coverage: venv
-	$(VENV)/bin/pytest . -q --cov=multipart --cov-report=term --cov-report=html:build/htmlcov
+	$(VENV)/bin/pytest . -q --cov=multipart --cov-branch --cov-report=term --cov-report=html:build/htmlcov
 
 upload: build
 	$(VENV)/bin/python3 -m twine upload --skip-existing dist/multipart-*

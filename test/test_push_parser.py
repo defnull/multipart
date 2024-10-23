@@ -398,6 +398,26 @@ class TestPushParser(PushTestBase):
             self.parse('--boundary\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--boundary--')
 
+    def test_error_property(self):
+        with self.assertRaises(multipart.MultipartError):
+            self.parse('--boundary\r\njunk\r\n--boundary--')
+        self.assertIsInstance(self.parser.error, multipart.ParserError)
+
+    def test_error_twice(self):
+        with self.assertRaises(multipart.ParserError):
+            self.parse('--boundary\r\njunk\r\n--boundary--')
+        first_error = self.parser.error
+        self.assertIsInstance(first_error, multipart.ParserError)
+        # The first error should stick
+        with self.assertRaises(multipart.ParserClosedError):
+            self.parse('more junk')
+        self.assertIs(self.parser.error, first_error)
+        with self.assertRaises(multipart.ParserError):
+            self.parser.close()
+        self.assertIs(self.parser.error, first_error)
+
+
+
 
 
 
