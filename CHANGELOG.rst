@@ -2,6 +2,18 @@
 Changelog
 =========
 
+This project follows Semantic Versioning (``major.minor.patch``), with the
+exception that behavior changes are allowed in minor releases as long as the
+change corrects behavior to match documentation, specification or
+expectation. In other words: Bugfixes do not count as backward incompatible
+changes, even if they technically change behavior from *incorrect* to *correct*
+and may break applications that rely on *incorrect* or *undefined* behavior.
+
+Release 1.2
+===========
+
+Not released yet.
+
 Release 1.1
 ===========
 
