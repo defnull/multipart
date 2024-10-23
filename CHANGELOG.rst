@@ -12,7 +12,19 @@ and may break applications that rely on *incorrect* or *undefined* behavior.
 Release 1.2
 ===========
 
-Not released yet.
+This release improves error handling and adds new functionality. API changes are
+backwards compatible.
+
+* feat: New `is_form_request(environ)` helper.
+* feat: Split up `MultipartError`` into more specific exceptions and added HTTP
+  status code info to each one. All exceptions are subclasses of `MultipartError`.
+* feat: Added `parse_form_data(ignore_errors)` parameter to throw exceptions in
+  non-strict mode, or suppress exceptions in strict mode. Default behavior does
+  not change.
+* fix: `parse_form_data` no longer checks the request method and `is_form_request`
+  also ignores it. All methods can carry parse-able form data, including unknown
+  methods. The only reliable way is to check the `Content-Type` header, which
+  both functions do.
 
 Release 1.1
 ===========

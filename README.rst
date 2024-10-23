@@ -20,11 +20,12 @@ low-level for framework authors and high-level for WSGI application developers:
 * ``PushMultipartParser``: A low-level incremental `SansIO <https://sans-io.readthedocs.io/>`_
   (non-blocking) parser suitable for asyncio and other time or memory constrained
   environments.
-* ``MultipartParser``: A streaming parser emitting memory- and disk-buffered
+* ``MultipartParser``: A streaming parser emitting memory- or disk-buffered
   ``MultipartPart`` instances.
-* ``parse_form_data``: A helper function to parse both ``multipart/form-data``
-  and ``application/x-www-form-urlencoded`` form submissions from a
-  `WSGI <https://peps.python.org/pep-3333/>`_ environment.
+* ``parse_form_data`` and ``is_form_request``: Helper functions for
+  `WSGI <https://peps.python.org/pep-3333/>`_ applications with support for
+  ``multipart/form-data`` as well as ``application/x-www-form-urlencoded`` form
+  submission requests.
 
 
 Installation
@@ -70,14 +71,14 @@ instances in return, one for text fields and the other for file uploads:
 
 .. code-block:: python
 
-    from multipart import parse_form_data
+    from multipart import parse_form_data, is_form_request
 
     def wsgi(environ, start_response):
-      if environ["REQUEST_METHOD"] == "POST":
+      if is_form_request(environ):
         forms, files = parse_form_data(environ)
 
-        title  = forms["title"]  # string
-        upload = files["upload"] # MultipartPart
+        title  = forms["title"]   # type: string
+        upload = files["upload"]  # type: MultipartPart
         upload.save_as(...)
 
 Note that form fields that are too large to fit into memory will end up as
@@ -129,25 +130,22 @@ allows you to process ``MultipartPart`` instances as soon as they arrive:
     from multipart import parse_options_header, MultipartParser
 
     def wsgi(environ, start_response):
-      assert environ["REQUEST_METHOD"] == "POST"
+      content_type, params = parse_options_header(environ["CONTENT_TYPE"])
 
-      content_type = environ["CONTENT_TYPE"]
-      content_type, content_params = parse_options_header(content_type)
-      assert content_type == "multipart/form-data"
+      if content_type == "multipart/form-data":
+        stream = environ["wsgi.input"]
+        boundary = params["boundary"]
+        charset = params.get("charset", "utf8")
 
-      stream = environ["wsgi.input"]
-      boundary = content_params.get("boundary")
-      charset = content_params.get("charset", "utf8")
-
-      parser = MultipartParser(stream, boundary, charset)
-      for part in parser:
-        if part.filename:
-          print(f"{part.name}: File upload ({part.size} bytes)")
-          part.save_as(...)
-        elif part.size < 1024:
-          print(f"{part.name}: Text field ({part.value!r})")
-        else:
-          print(f"{part.name}: Test field, but too big to print :/")
+        parser = MultipartParser(stream, boundary, charset)
+        for part in parser:
+          if part.filename:
+            print(f"{part.name}: File upload ({part.size} bytes)")
+            part.save_as(...)
+          elif part.size < 1024:
+            print(f"{part.name}: Text field ({part.value!r})")
+          else:
+            print(f"{part.name}: Test field, but too big to print :/")
 
 
 Non-blocking parser: ``PushMultipartParser`` 
