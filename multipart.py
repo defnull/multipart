@@ -904,8 +904,8 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
             for key, values in data.items():
                 for value in values:
                     forms.append(key, value)
-        else:
-            raise ParserError("Unsupported Content-Type")
+        elif strict:
+            raise ParserWarning("Unsupported Content-Type")
 
     except MultipartError:
         if strict:
