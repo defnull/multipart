@@ -12,7 +12,9 @@ License: MIT (see LICENSE file)
 __author__ = "Marcel Hellkamp"
 __version__ = '1.2.0-dev'
 __license__ = "MIT"
-__all__ = ["MultipartError", "parse_form_data", "MultipartParser", "MultipartPart", "PushMultipartParser", "MultipartSegment"]
+__all__ = ["MultipartError", "is_form_request", "parse_form_data",
+           "MultipartParser", "MultipartPart", "PushMultipartParser",
+           "MultipartSegment"]
 
 
 import re
@@ -786,6 +788,20 @@ class MultipartPart(object):
 ##############################################################################
 #################################### WSGI ####################################
 ##############################################################################
+
+
+def is_form_request(environ):
+    """ Return True if the environ represents a form request that can be parsed
+        with :func:`parse_form_data`. Checks for a compatible `Content-Type`
+        header.
+    """
+
+    content_type = environ.get("CONTENT_TYPE", "")
+    return content_type.split(";", 1)[0].strip().lower() in (
+        "multipart/form-data",
+        "application/x-www-form-urlencoded",
+        "application/x-url-encoded"
+    )
 
 
 def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
