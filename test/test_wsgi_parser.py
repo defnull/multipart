@@ -3,7 +3,16 @@ from .utils import BaseParserTest
 
 import multipart
 
+
 class TestFormParser(BaseParserTest):
+
+    def test_is_form_request(self):
+        self.assertTrue(multipart.is_form_request({"CONTENT_TYPE": "multipart/form-data"}))
+        self.assertTrue(multipart.is_form_request({"CONTENT_TYPE": "Multipart/Form-Data; foo=bar; baz=\"a b c\""}))
+        self.assertTrue(multipart.is_form_request({"CONTENT_TYPE": "application/x-www-form-urlencoded"}))
+        self.assertTrue(multipart.is_form_request({"CONTENT_TYPE": "application/x-url-encoded"}))
+        self.assertFalse(multipart.is_form_request({"CONTENT_TYPE": "application/x-form"}))
+        self.assertFalse(multipart.is_form_request({}))
 
     def test_multipart(self):
        self.write_field("file1", "abc", filename="random.png", content_type="image/png")
@@ -58,11 +67,13 @@ class TestFormParser(BaseParserTest):
 
     def test_missing_content_type(self):
         self.environ['CONTENT_TYPE'] = None
+        self.parse_form_data(strict=False)
         with self.assertRaises(multipart.MultipartError):
             self.parse_form_data(strict=True)
 
     def test_unsupported_content_type(self):
         self.environ['CONTENT_TYPE'] = 'multipart/fantasy'
+        self.parse_form_data(strict=False)
         with self.assertRaises(multipart.MultipartError):
             self.parse_form_data(strict=True)
 
@@ -81,6 +92,7 @@ class TestFormParser(BaseParserTest):
     
     def test_invalid_environ(self):
         self.environ['wsgi.input'] = None
+        self.parse_form_data(strict=False)
         with self.assertRaises(multipart.MultipartError):
             self.parse_form_data(strict=True)
 
