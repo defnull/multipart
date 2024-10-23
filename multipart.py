@@ -856,8 +856,6 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
         raise ParserWarning("No 'wsgi.input' in environment.")
 
     try:
-        if environ.get("REQUEST_METHOD", "GET").upper() not in ("POST", "PUT"):
-            raise ParserError("Request method other than POST or PUT")
         try:
             content_length = int(environ.get("CONTENT_LENGTH", "-1"))
         except ValueError:
