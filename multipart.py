@@ -852,28 +852,32 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
 
     forms, files = MultiDict(), MultiDict()
 
-    if strict and 'wsgi.input' not in environ:
-        raise ParserWarning("No 'wsgi.input' in environment.")
-
     try:
+        stream = environ.get("wsgi.input")
+        if not stream:
+            if strict:
+                raise ParserWarning("No 'wsgi.input' in environment.")
+            stream = BytesIO()
+
+        content_type = environ.get("CONTENT_TYPE", "")
+        if not content_type:
+            if strict:
+                raise ParserWarning("Missing Content-Type header")
+            return forms, files
+
         try:
             content_length = int(environ.get("CONTENT_LENGTH", "-1"))
         except ValueError:
             raise ParserError("Invalid Content-Length header")
-        content_type = environ.get("CONTENT_TYPE", "")
-
-        if not content_type:
-            raise ParserError("Missing Content-Type header")
 
         content_type, options = parse_options_header(content_type)
-        stream = environ.get("wsgi.input") or BytesIO()
         kwargs["charset"] = charset = options.get("charset", charset)
 
         if content_type == "multipart/form-data":
             boundary = options.get("boundary", "")
 
             if not boundary:
-                raise ParserError("No boundary for multipart/form-data.")
+                raise ParserError("Missing boundary for multipart/form-data")
 
             for part in MultipartParser(stream, boundary, content_length, **kwargs):
                 if part.filename or not part.is_buffered():
