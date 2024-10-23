@@ -828,26 +828,33 @@ def is_form_request(environ):
     )
 
 
-def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
+def parse_form_data(
+        environ,
+        charset="utf8",
+        strict=False,
+        ignore_errors=None,
+        **kwargs):
     """ Parses both types of form data (multipart and url-encoded) from a WSGI
-        environment and returns a (forms, files) tuple. Both are instances of 
-        :class:`MultiDict` and may contain multiple values per key.
-
-        The `forms` MultiDict contains text form fields as strings.
-        The `files` MultiDict contains :class:`MultipartPart` instances, either
-        because the form-field was a file-upload or the value was too big to fit
-        into memory limits.
+        environment and returns two :class:`MultiDict` instances, one for
+        text form fields (strings) and one for file uploads (:class:`MultipartPart`
+        instances). Text fields that are too big to fit into memory limits are
+        treated as file uploads with no filename.
 
         In case of an url-encoded form request, the total request body size is
-        limited by `memory_limit`. Larger requests will rigger an error. 
+        limited by `memory_limit`. Larger requests will trigger an error. 
 
-        :param environ:  A WSGI environment dictionary.
-        :param charset:  The default charset to use to decode headers and text fields.
-        :param strict:   If True, raise :exc:`MultipartError` for non-fatal
-                         parsing errors. Fatal errors always raise an exception.
-        :param **kwargs: Additional keyword arguments are passed to
-                         :class:`MultipartParser`
-        :raises MultipartError: On parsing errors or exceeded limits.
+        :param environ: A WSGI environment dictionary. Only `wsgi.input`,
+            `CONTENT_TYPE` and `CONTENT_LENGTH` are used. 
+        :param charset: The default charset used to decode headers and text fields.
+        :param strict: Enables additional format and sanity checks.
+        :param ignore_errors: If True, all errors are silently ignored and the
+            returned results may be empty or incomplete. If False, raised
+            exceptions are propagated to teh caller. If None (default) exceptions
+            are propagated in strict mode but ignored in non-strict mode.
+        :param **kwargs: Additional keyword arguments are forwarded to
+            :class:`MultipartParser`. This is particularly useful to change the
+            default parser limits.
+        :raises MultipartError: See `ignore_errors` parameters. 
     """
 
     forms, files = MultiDict(), MultiDict()
@@ -912,10 +919,11 @@ def parse_form_data(environ, charset="utf8", strict=False, **kwargs):
             raise ParserWarning("Unsupported Content-Type")
 
     except MultipartError:
-        if strict:
+        if ignore_errors is None:
+            ignore_errors = not strict
+        if not ignore_errors:
             for _, part in files.iterallitems():
-                if hasattr(part, 'close'):
-                    part.close()
+                part.close()
             raise
 
     return forms, files
