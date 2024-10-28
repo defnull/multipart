@@ -13,7 +13,7 @@ __author__ = "Marcel Hellkamp"
 __version__ = '1.2.0-dev'
 __license__ = "MIT"
 __all__ = ["MultipartError", "ParserLimitReached", "ParserError",
-           "ParserWarning", "ParserClosedError", "is_form_request",
+           "StrictParserError", "ParserStateError", "is_form_request",
            "parse_form_data", "MultipartParser", "MultipartPart",
            "PushMultipartParser", "MultipartSegment"]
 
@@ -36,21 +36,28 @@ import functools
 class MultipartError(ValueError):
     """ Base class for all parser errors or warnings """
 
-
-class ParserLimitReached(MultipartError):
-    """ Parser reached one of the configured limits """
+    #: Suitable HTTP status code for this exception
+    http_status = 500 # Internal Error
 
 
 class ParserError(MultipartError):
-    """ Detected invalid, inconsistent or incomplete input """
+    """ Detected invalid input """
+    http_status = 415 # Unsupported Media Type
 
 
-class ParserWarning(ParserError):
+class StrictParserError(ParserError):
     """ Detected unusual input while parsing in strict mode """
+    http_status = 415 # Unsupported Media Type
 
 
-class ParserClosedError(MultipartError):
-    """ Parser received data after beeing closed """
+class ParserLimitReached(MultipartError):
+    """ Parser reached one of the configured limits """
+    http_status = 413 # Request Entity Too Large
+
+
+class ParserStateError(MultipartError):
+    """ Parser reachend an invalid state (e.g. use after close) """
+    http_status = 500 # Internal Error
 
 
 ##############################################################################
@@ -311,7 +318,7 @@ class PushMultipartParser:
                 return
 
             if self.closed:
-                raise ParserClosedError("Parser closed")
+                raise ParserStateError("Parser closed")
 
             if self.content_length > -1 and self.content_length < self._parsed + len(
                 self._buffer
@@ -320,7 +327,7 @@ class PushMultipartParser:
 
             if self._state is _COMPLETE:
                 if self.strict:
-                    raise ParserWarning("Unexpected data after end of multipart stream")
+                    raise StrictParserError("Unexpected data after end of multipart stream")
                 return
 
             buffer = self._buffer
@@ -339,7 +346,7 @@ class PushMultipartParser:
                     if (index == -1 or index > offset) and self.strict:
                         # Data before the first delimiter is allowed (RFC 2046,
                         # section 5.1.1) but very uncommon.
-                        raise ParserWarning("Unexpected data in front of first delimiter")
+                        raise StrictParserError("Unexpected data in front of first delimiter")
 
                     if index > -1:
                         tail = buffer[index + d_len : index + d_len + 2]
@@ -499,7 +506,7 @@ class MultipartSegment:
 
         if line[0] in b" \t":  # Multi-line header value
             if not self.headerlist or parser.strict:
-                raise ParserWarning("Unexpected segment header continuation")
+                raise StrictParserError("Unexpected segment header continuation")
             prev = ": ".join(self.headerlist.pop())
             line = prev.encode(parser.header_charset) + b" " + line.strip()
 
@@ -529,7 +536,7 @@ class MultipartSegment:
                 if dtype != "form-data":
                     raise ParserError("Invalid Content-Disposition segment header: Wrong type")
                 if "name" not in args and self._parser.strict:
-                    raise ParserWarning("Invalid Content-Disposition segment header: Missing name option")
+                    raise StrictParserError("Invalid Content-Disposition segment header: Missing name option")
                 self.name = args.get("name", "")
                 self.filename = args.get("filename")
             elif h == "Content-Type":
@@ -847,10 +854,10 @@ def parse_form_data(
             `CONTENT_TYPE` and `CONTENT_LENGTH` are used. 
         :param charset: The default charset used to decode headers and text fields.
         :param strict: Enables additional format and sanity checks.
-        :param ignore_errors: If True, all errors are silently ignored and the
-            returned results may be empty or incomplete. If False, raised
-            exceptions are propagated to teh caller. If None (default) exceptions
-            are propagated in strict mode but ignored in non-strict mode.
+        :param ignore_errors: If True, suppress all exceptions. The returned
+            results may be empty or incomplete. If False, then exceptions are
+            not suppressed. A value of None (default) throws exceptions in
+            strict mode but suppresses errors in non-strict mode.
         :param **kwargs: Additional keyword arguments are forwarded to
             :class:`MultipartParser`. This is particularly useful to change the
             default parser limits.
@@ -863,17 +870,17 @@ def parse_form_data(
         stream = environ.get("wsgi.input")
         if not stream:
             if strict:
-                raise ParserWarning("No 'wsgi.input' in environment.")
+                raise StrictParserError("No 'wsgi.input' in WSGI environment")
             stream = BytesIO()
 
         content_type = environ.get("CONTENT_TYPE", "")
         if not content_type:
             if strict:
-                raise ParserWarning("Missing Content-Type header")
+                raise StrictParserError("Missing Content-Type header")
             return forms, files
 
         try:
-            content_length = int(environ.get("CONTENT_LENGTH", "-1"))
+            content_length = int(environ.get("CONTENT_LENGTH", -1))
         except ValueError:
             raise ParserError("Invalid Content-Length header")
 
@@ -916,7 +923,7 @@ def parse_form_data(
                 for value in values:
                     forms.append(key, value)
         elif strict:
-            raise ParserWarning("Unsupported Content-Type")
+            raise StrictParserError("Unsupported Content-Type")
 
     except MultipartError:
         if ignore_errors is None:
