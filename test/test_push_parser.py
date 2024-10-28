@@ -409,7 +409,7 @@ class TestPushParser(PushTestBase):
         first_error = self.parser.error
         self.assertIsInstance(first_error, multipart.ParserError)
         # The first error should stick
-        with self.assertRaises(multipart.ParserClosedError):
+        with self.assertRaises(multipart.ParserStateError):
             self.parse('more junk')
         self.assertIs(self.parser.error, first_error)
         with self.assertRaises(multipart.ParserError):
