@@ -268,7 +268,7 @@ class PushMultipartParser:
         self.max_segment_count = max_segment_count
         self.strict = strict
 
-        self._delimiter = b"--" + self.boundary
+        self._delimiter = b"\r\n--" + self.boundary
 
         # Internal parser state
         self._parsed = 0
@@ -330,25 +330,25 @@ class PushMultipartParser:
                     raise StrictParserError("Unexpected data after end of multipart stream")
                 return
 
-            buffer = self._buffer
             delimiter = self._delimiter
-            buffer += chunk  # Copy chunk to existing buffer
-            offset = 0
             d_len = len(delimiter)
+            buffer = self._buffer
+            buffer += chunk  # In-place append
             bufferlen = len(buffer)
+            offset = 0
 
             while True:
 
                 if self._state is _PREAMBLE:
-                    # Scan for first delimiter
-                    index = buffer.find(delimiter, offset)
+                    # Scan for first delimiter (CRLF prefix is optional here)
+                    index = buffer.find(delimiter[2:], offset)
 
                     if index > -1:
                         # Boundary must be at position zero, or start with CRLF
                         if index > 0 and not (index >= 2 and buffer[index-2:index] == b"\r\n"):
                             raise ParserError("Unexpected byte in front of first boundary")
 
-                        next_start = index + d_len + 2
+                        next_start = index + d_len
                         tail = buffer[next_start-2 : next_start]
 
                         if tail == b"\r\n":  # Normal delimiter found
@@ -365,13 +365,13 @@ class PushMultipartParser:
                         elif len(tail) == 2:
                             raise ParserError("Unexpected byte after first boundary")
 
-                    elif self.strict and bufferlen >= d_len + 2:
+                    elif self.strict and bufferlen >= d_len:
                         # No boundary in first chunk -> Fail fast in strict mode
                         # and do not waste time consuming a legacy preamble.
                         raise StrictParserError("Boundary not found in first chunk")
 
                     # Delimiter not found, skip data until we find one
-                    offset = bufferlen - (d_len + 4)
+                    offset = bufferlen - (d_len + 2)
                     break  # wait for more data
 
                 elif self._state is _HEADER:
@@ -396,13 +396,13 @@ class PushMultipartParser:
                         break  # wait for more data
 
                 elif self._state is _BODY:
-                    if offset + d_len + 4 > bufferlen:
+                    if offset + d_len + 2 > bufferlen:
                         break  # wait for more data
 
                     # Scan for CRLF + boundary + (CRLF or '--')
-                    index = buffer.find(b"\r\n" + delimiter, offset)
+                    index = buffer.find(delimiter, offset)
                     if index > -1: 
-                        next_start = index + d_len + 4
+                        next_start = index + d_len + 2
                         tail = buffer[next_start-2 : next_start]
 
                         if tail == b"\r\n" or tail == b"--":
@@ -424,7 +424,7 @@ class PushMultipartParser:
 
                     # The buffer may contain a partial delimiter at the end, so
                     # we have to keep the last part.
-                    chunk_end = bufferlen - (d_len + 3)
+                    chunk_end = bufferlen - (d_len + 1)
                     if chunk_end > offset:
                         self._current._update_size(chunk_end - offset)
                         yield buffer[offset:chunk_end]
