@@ -112,10 +112,9 @@ class TestPushParser(PushTestBase):
         self.parse(b"--boundary--")
         assert self.parser._state is multipart._COMPLETE
 
-    @assertStrict("Unexpected data in front of first delimiter")
-    def test_junk_before(self, strict):
-        self.reset(strict=strict)
-        self.parse(b"junk--boundary--")
+    def test_junk_before(self):
+        with self.assertParseError("Unexpected byte in front of first boundary"):
+            self.parse(b"junk--boundary--")
 
     @assertStrict("Unexpected data after end of multipart stream")
     def test_junk_after(self, strict):
@@ -138,8 +137,8 @@ class TestPushParser(PushTestBase):
                 self.parse(b"--boundary")
 
     def test_invalid_NL_delimiter(self):
-        with self.assertParseError("Invalid line break after delimiter"):
-            self.parse(b"--boundary\n")
+        with self.assertParseError("Invalid line break after first boundary"):
+            self.parse(b"--boundary\nfoo")
 
     def test_invalid_NL_header(self):
         with self.assertParseError("Invalid line break in segment header"):
@@ -346,13 +345,39 @@ class TestPushParser(PushTestBase):
         self.assertTrue(body.startswith(b"abc--boundary\r\n"))
         self.assertTrue(body.endswith(b"abc"))
 
-    @assertStrict("Unexpected data in front of first delimiter")
+    @assertStrict("Boundary not found in first chunk")
     def test_ignore_junk_before_start_boundary(self, strict):
         self.reset(strict=strict)
-        self.parse('Preamble\r\n', '--boundary\r\n'
+        self.parse('Lots of junk lots of junk', '\r\n--boundary\r\n'
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
         self.parser.close()
+
+    def test_preamble_must_end_in_crlf(self):
+        """ As per spec the start boundary must be at position zero, or start
+            with CRLF. Boundaries are forbidden in segment bodies, but not
+            in the preamble. This means that a preamble can actually contain the
+            boundary, as long as it does not start with CRLF. This is stupid, so
+            let's ignore the spec here. A preamble that contains the boundary is
+            so rare and suspicious that we assume a broken client and fail fast,
+            instead of silently skipping the first segment and loosing data.
+         """
+        with self.assertParseError("Unexpected byte in front of first boundary"):
+            self.parse(
+                'Preamble\n', '--boundary\r\n'
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
+        self.reset()
+        with self.assertParseError("Unexpected byte in front of first boundary"):
+            self.parse('\n--boundary--')
+            
+    def test_accept_crln_before_start_boundary(self):
+        """ While uncommon, a single \\r\\n before and after the first and last
+            boundary should be accepted even in strict mode. """
+        self.reset(strict=True)
+        self.parse('\r\n--boundary\r\n'
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n')
 
     def test_allow_junk_after_end_boundary(self):
         self.parse('--boundary--\r\njunk')
@@ -360,6 +385,29 @@ class TestPushParser(PushTestBase):
         self.parse('--boundary\r\n'
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n', 'junk') 
+
+    def test_partial_start_boundary(self):
+        self.parse('--boun', 'dary\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n', 'junk')
+
+    def test_tiny_chunks(self):
+        payload = list(''.join(['--boundary\r\n',
+                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n']))
+        for char in payload:
+            self.parse(char)
+        self.assertEqual(self.get_segment("file1")[1], b"abc")
+
+    def test_no_boundary(self):
+        with self.assertParseError("Unexpected end of multipart stream (parser closed)"):
+            self.parse('Not a multipart message')
+            self.parser.close()
+
+        # Strict mode should fail quicker
+        self.reset(strict=True)
+        with self.assertParseError("Boundary not found in first chunk"):
+            self.parse('Not a multipart message')
 
     def test_no_start_boundary(self):
         with self.assertRaises(multipart.MultipartError), self.parser:
