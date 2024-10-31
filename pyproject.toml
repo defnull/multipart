@@ -43,7 +43,8 @@ dev = [
 [tool.flit.sdist]
 include = [
   "test/*.py",
-  "MAINTAINERS.rst"
+  "MAINTAINERS.rst",
+  "CHANGELOG.rst"
 ]
 
 [tool.pytest.ini_options]
