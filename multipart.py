@@ -320,10 +320,10 @@ class PushMultipartParser:
             if self.closed:
                 raise ParserStateError("Parser closed")
 
-            if self.content_length > -1 and self.content_length < self._parsed + len(
-                self._buffer
-            ) + len(chunk):
-                raise ParserError("Content-Length limit exceeded")
+            if self.content_length > -1:
+                available = self._parsed + len(self._buffer) + len(chunk)
+                if self.content_length < available:
+                    raise ParserError("Content-Length limit exceeded")
 
             if self._state is _COMPLETE:
                 if self.strict:
@@ -339,41 +339,43 @@ class PushMultipartParser:
 
             while True:
 
-                # Scan for first delimiter
                 if self._state is _PREAMBLE:
+                    # Scan for first delimiter
                     index = buffer.find(delimiter, offset)
 
-                    if (index == -1 or index > offset) and self.strict:
-                        # Data before the first delimiter is allowed (RFC 2046,
-                        # section 5.1.1) but very uncommon.
-                        raise StrictParserError("Unexpected data in front of first delimiter")
-
                     if index > -1:
-                        tail = buffer[index + d_len : index + d_len + 2]
+                        # Boundary must be at position zero, or start with CRLF
+                        if index > 0 and not (index >= 2 and buffer[index-2:index] == b"\r\n"):
+                            raise ParserError("Unexpected byte in front of first boundary")
 
-                        # First delimiter found -> Start after it
-                        if tail == b"\r\n":
+                        next_start = index + d_len + 2
+                        tail = buffer[next_start-2 : next_start]
+
+                        if tail == b"\r\n":  # Normal delimiter found
                             self._current = MultipartSegment(self)
                             self._state = _HEADER
-                            offset = index + d_len + 2
+                            offset = next_start
                             continue
-
-                        # First delimiter is terminator -> Empty multipart stream
-                        if tail == b"--":
-                            offset = index + d_len + 2
+                        elif tail == b"--":  # First is also last delimiter
+                            offset = next_start
                             self._state = _COMPLETE
                             break  # parsing complete
+                        elif tail[0:1] == b"\n":  # Broken client or legacy test case
+                            raise ParserError("Invalid line break after first boundary")
+                        elif len(tail) == 2:
+                            raise ParserError("Unexpected byte after first boundary")
 
-                        # Bad newline after valid delimiter -> Broken client
-                        if tail and tail[0:1] == b"\n":
-                            raise ParserError("Invalid line break after delimiter")
+                    elif self.strict and bufferlen >= d_len + 2:
+                        # No boundary in first chunk -> Fail fast in strict mode
+                        # and do not waste time consuming a legacy preamble.
+                        raise StrictParserError("Boundary not found in first chunk")
 
                     # Delimiter not found, skip data until we find one
                     offset = bufferlen - (d_len + 4)
                     break  # wait for more data
 
-                # Parse header section
                 elif self._state is _HEADER:
+                    # Find end of header line
                     nl = buffer.find(b"\r\n", offset)
 
                     if nl > offset:  # Non-empty header line
@@ -393,43 +395,50 @@ class PushMultipartParser:
                             raise ParserLimitReached("Maximum segment header length exceeded")
                         break  # wait for more data
 
-                # Parse body until next delimiter is found
                 elif self._state is _BODY:
+                    if offset + d_len + 4 > bufferlen:
+                        break  # wait for more data
+
+                    # Scan for CRLF + boundary + (CRLF or '--')
                     index = buffer.find(b"\r\n" + delimiter, offset)
-                    tail = index > -1 and buffer[index + d_len + 2 : index + d_len + 4]
+                    if index > -1: 
+                        next_start = index + d_len + 4
+                        tail = buffer[next_start-2 : next_start]
 
-                    if tail in (b"\r\n", b"--"):  # Delimiter or terminator found
-                        if index > offset:
-                            self._current._update_size(index - offset)
-                            yield buffer[offset:index]
-                        offset = index + d_len + 4
-                        self._current._mark_complete()
-                        yield None
+                        if tail == b"\r\n" or tail == b"--":
+                            if index > offset:
+                                self._current._update_size(index - offset)
+                                yield buffer[offset:index]
 
-                        if tail == b"--":  # Delimiter was a terminator
-                            self._state = _COMPLETE
-                            break
+                            offset = next_start
+                            self._current._mark_complete()
+                            yield None  # End of segment
 
-                        # Normal delimiter, continue with next segment
-                        self._current = MultipartSegment(self)
-                        self._state = _HEADER
-                        continue
+                            if tail == b"--":  # Last delimiter
+                                self._state = _COMPLETE
+                                break
+                            else:  # Normal delimiter
+                                self._current = MultipartSegment(self)
+                                self._state = _HEADER
+                                continue
 
-                    # No delimiter or terminator found
-                    min_keep = d_len + 3
-                    chunk = buffer[offset:-min_keep]
-                    if chunk:
-                        self._current._update_size(len(chunk))
-                        offset += len(chunk)
-                        yield chunk
+                    # The buffer may contain a partial delimiter at the end, so
+                    # we have to keep the last part.
+                    chunk_end = bufferlen - (d_len + 3)
+                    if chunk_end > offset:
+                        self._current._update_size(chunk_end - offset)
+                        yield buffer[offset:chunk_end]
+                        offset = chunk_end
                     break  # wait for more data
 
                 else:  # pragma: no cover
                     raise RuntimeError(f"Unexpected internal state: {self._state}")
 
             # We ran out of data, or reached the end
-            self._parsed += offset
-            buffer[:] = buffer[offset:]
+            if offset > 0:
+                self._parsed += offset
+                buffer[:] = buffer[offset:]
+
         except Exception as err:
             if not self.error:
                 self.error = err
