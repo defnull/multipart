@@ -353,24 +353,33 @@ class TestPushParser(PushTestBase):
                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
         self.parser.close()
 
-    def test_preamble_must_end_in_crlf(self):
-        """ As per spec the start boundary must be at position zero, or start
-            with CRLF. Boundaries are forbidden in segment bodies, but not
-            in the preamble. This means that a preamble can actually contain the
-            boundary, as long as it does not start with CRLF. This is stupid, so
-            let's ignore the spec here. A preamble that contains the boundary is
-            so rare and suspicious that we assume a broken client and fail fast,
-            instead of silently skipping the first segment and loosing data.
+    def test_reject_boundary_in_preamble(self):
+        """ The RFC defines that a boundary must not appear in segment bodies,
+            but technically it is still allowed to appear in the preamble as
+            long as it does not qualify as a full start delimiter (position zero,
+            or separated from the preamble by CRLF). This is absurd, preambles
+            are useless to begin with and the boundary appearing in the preamble
+            is never intentional. Instead of silently skipping it (and the first
+            segment), we assume a broken client and fail fast, even in
+            non-strict mode. A clear error is better as silently loosing data.
          """
         with self.assertParseError("Unexpected byte in front of first boundary"):
             self.parse(
                 'Preamble\n', '--boundary\r\n'
                 'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                 'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
+
         self.reset()
         with self.assertParseError("Unexpected byte in front of first boundary"):
             self.parse('\n--boundary--')
-            
+
+        self.reset()
+        with self.assertParseError("Unexpected byte after first boundary"):
+            self.parse(
+                '--boundaryy\r\n''--boundary\r\n'
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
+
     def test_accept_crln_before_start_boundary(self):
         """ While uncommon, a single \\r\\n before and after the first and last
             boundary should be accepted even in strict mode. """
