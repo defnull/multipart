@@ -12,8 +12,8 @@ and may break applications that rely on *incorrect* or *undefined* behavior.
 Release 1.2
 ===========
 
-This release improves error handling and adds new functionality. API changes are
-backwards compatible.
+This release improves error handling, fixes several parser edge-cases and adds
+new functionality. API changes are backwards compatible.
 
 * feat: New `is_form_request(environ)` helper.
 * feat: Split up `MultipartError`` into more specific exceptions and added HTTP
@@ -25,6 +25,10 @@ backwards compatible.
   also ignores it. All methods can carry parse-able form data, including unknown
   methods. The only reliable way is to check the `Content-Type` header, which
   both functions do.
+* fix: First boundary not detected if separated by chunk border.
+* fix: Allow CRLF in front of first boundary, even in strict mode.
+* fix: Fail fast if first boundary is broken or part of the preamble.
+* fix: Fail if stream ends without finding any boundary at all.
 
 Release 1.1
 ===========
