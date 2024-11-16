@@ -6,7 +6,7 @@ build-backend = "flit_core.buildapi"
 name = "multipart"
 requires-python = ">=3.8"
 dynamic = ["version"]
-license = {file = "LICENSE"}
+license = {text = "MIT License"}
 description = "Parser for multipart/form-data"
 readme = "README.rst"
 authors = [
@@ -28,7 +28,7 @@ classifiers = [
 PyPI = "https://pypi.org/project/multipart/"
 Homepage = "https://github.com/defnull/multipart"
 Documentation = "https://github.com/defnull/multipart?tab=readme-ov-file#parser-for-multipartform-data"
-Changelog = "https://github.com/defnull/multipart?tab=readme-ov-file#changelog"
+Changelog = "https://github.com/defnull/multipart/blob/master/CHANGELOG.rst"
 Source = "https://github.com/defnull/multipart"
 Issues = "https://github.com/defnull/multipart/issues"
 
