@@ -14,18 +14,24 @@ Parser for multipart/form-data
     :target: https://pypi.python.org/pypi/multipart/
     :alt: License
 
-This module provides multiple parsers for RFC-7578 ``multipart/form-data``, both
-low-level for framework authors and high-level for WSGI application developers:
+.. _HTML5: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#multipart-form-data
+.. _RFC7578: https://www.rfc-editor.org/rfc/rfc7578
+.. _WSGI: https://peps.python.org/pep-3333
+.. _ASGI: https://asgi.readthedocs.io/en/latest/
+.. _SansIO: https://sans-io.readthedocs.io/
+.. _asyncio: https://docs.python.org/3/library/asyncio.html
 
-* ``PushMultipartParser``: A low-level incremental `SansIO <https://sans-io.readthedocs.io/>`_
-  (non-blocking) parser suitable for asyncio and other time or memory constrained
-  environments.
-* ``MultipartParser``: A streaming parser emitting memory- or disk-buffered
-  ``MultipartPart`` instances.
-* ``parse_form_data`` and ``is_form_request``: Helper functions for
-  `WSGI <https://peps.python.org/pep-3333/>`_ applications with support for
-  ``multipart/form-data`` as well as ``application/x-www-form-urlencoded`` form
-  submission requests.
+This module provides a fast incremental non-blocking parser for RFC7578_
+``multipart/form-data``, as well as blocking alternatives for easier use in
+WSGI_ or CGI applications:
+
+* ``PushMultipartParser``: Incremental and non-blocking (SansIO_) parser
+  suitable for ASGI_, asyncio_ and other time or memory constrained environments.
+* ``MultipartParser``: Streaming parser that yields memory- or disk-buffered
+  ``MultipartPart`` instances. 
+* ``parse_form_data(environ)`` and ``is_form_request(environ)``: Convenience
+  functions for WSGI_ applications with support for both ``multipart/form-data``
+  and ``application/x-www-form-urlencoded`` form submissions.
 
 
 Installation
@@ -33,24 +39,26 @@ Installation
 
 ``pip install multipart``
 
+
 Features
 ========
 
 * Pure python single file module with no dependencies.
-* 100% test coverage. Tested with inputs as seen from actual browsers and HTTP clients.
+* Well tested with inputs from actual browsers and HTTP clients. 100% test coverage.
 * Parses multiple GB/s on modern hardware (see `benchmarks <https://github.com/defnull/multipart_bench>`_).
 * Quickly rejects malicious or broken inputs and emits useful error messages.
 * Enforces configurable memory and disk resource limits to prevent DoS attacks.
 
-**Limitations:** This parser implements ``multipart/form-data`` as it is used by
-actual modern browsers and HTTP clients, which means:
+**Scope:** This parser implements ``multipart/form-data`` as defined by HTML5_
+and RFC7578_ and aims to support all browsers or HTTP clients in use today.
+Legacy browsers are supported to some degree, but only if those workarounds do
+not impact performance or security. In detail this means:
 
 * Just ``multipart/form-data``, not suitable for email parsing.
-* No ``multipart/mixed`` support (deprecated in RFC 7578).
-* No ``base64`` or ``quoted-printable`` transfer encoding (deprecated in RFC 7578).
-* No ``encoded-word`` or ``name=_charset_`` encoding markers (discouraged in RFC 7578).
-* No support for clearly broken input (e.g. invalid line breaks or header names).
-
+* No ``multipart/mixed`` support (deprecated in RFC7578_).
+* No ``base64`` or ``quoted-printable`` transfer encoding (deprecated in RFC7578_).
+* No ``encoded-word`` or ``name=_charset_`` encoding markers (deprecated in HTML5_).
+* No support for clearly broken clients (e.g. invalid line breaks or headers).
 
 Usage and Examples
 ==================
