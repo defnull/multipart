@@ -15,25 +15,25 @@ Release 1.2
 This release improves error handling, fixes several parser edge-cases and adds
 new functionality. API changes are backwards compatible.
 
-* feat: New `is_form_request(environ)` helper.
-* feat: Split up `MultipartError`` into more specific exceptions and added HTTP
-  status code info to each one. All exceptions are subclasses of `MultipartError`.
-* feat: Added `parse_form_data(ignore_errors)` parameter to throw exceptions in
+* feat: Split up `MultipartError`` into more specific exceptions and add HTTP
+  status code hints. All exceptions are subclasses of `MultipartError`.
+* feat: New `parse_form_data(ignore_errors)` parameter to throw exceptions in
   non-strict mode, or suppress exceptions in strict mode. Default behavior does
-  not change.
-* feat: Added specialized `content_disposition_[un]quote` functions.
-* feat: `parse_options_header` can now use different unquote functions. The
+  not change (throw in strict-mode, ignore in non-strict mode).
+* feat: New `is_form_request(environ)` helper.
+* feat: New specialized `content_disposition_[un]quote` functions.
+* feat: `parse_options_header()` can now use different unquote functions. The
   default does not change.
-* fix: `parse_form_data` no longer checks the request method and `is_form_request`
-  also ignores it. All methods can carry parse-able form data, including unknown
-  methods. The only reliable way is to check the `Content-Type` header, which
-  both functions do.
+* fix: `parse_form_data()` no longer checks the request method and the new
+  `is_form_request` function also ignores it. All methods can carry parse-able
+  form data, including unknown methods. The only reliable way is to check the
+  `Content-Type` header, which both functions do.
 * fix: First boundary not detected if separated by chunk border.
 * fix: Allow CRLF in front of first boundary, even in strict mode.
 * fix: Fail fast if first boundary is broken or part of the preamble.
 * fix: Fail if stream ends without finding any boundary at all.
 * fix: Use modern WHATWG quoting rules for field names and filenames (#60).
-  Legacy quoting still supported as a fallback.
+  Legacy quoting is still supported as a fallback.
 
 Release 1.1
 ===========
