@@ -39,6 +39,10 @@ dev = [
     "build",
     "twine",
 ]
+docs = [
+    "Sphinx>=8,<9",
+    "sphinx_rtd_theme"
+]
 
 [tool.flit.sdist]
 include = [
