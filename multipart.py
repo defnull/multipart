@@ -917,7 +917,7 @@ def parse_form_data(
             results may be empty or incomplete. If False, then exceptions are
             not suppressed. A value of None (default) throws exceptions in
             strict mode but suppresses errors in non-strict mode.
-        :param **kwargs: Additional keyword arguments are forwarded to
+        :param kwargs: Additional keyword arguments are forwarded to
             :class:`MultipartParser`. This is particularly useful to change the
             default parser limits.
         :raises MultipartError: See `ignore_errors` parameters. 
