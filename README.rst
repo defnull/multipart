@@ -1,6 +1,6 @@
-==============================
-Parser for multipart/form-data
-==============================
+=================================
+Python multipart/form-data parser
+=================================
 
 .. image:: https://github.com/defnull/multipart/actions/workflows/test.yaml/badge.svg
     :target: https://github.com/defnull/multipart/actions/workflows/test.yaml
