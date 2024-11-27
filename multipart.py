@@ -106,7 +106,7 @@ class MultiDict(DictMixin):
         return self.dict.keys()
 
     def __getitem__(self, key):
-        return self.get(key, KeyError, -1)
+        return self.dict[key][-1]
 
     def __setitem__(self, key, value):
         self.append(key, value)
@@ -124,11 +124,10 @@ class MultiDict(DictMixin):
         return self.dict.get(key) or []
 
     def get(self, key, default=None, index=-1):
-        # Not documented because it's likely to change.
-        if key not in self.dict and default != KeyError:
-            return [default][index]
-
-        return self.dict[key][index]
+        try:
+            return self.dict[key][index]
+        except (KeyError, IndexError):
+            return default
 
     def iterallitems(self):
         """ Yield (key, value) pairs with repeating keys for each value. """
