@@ -26,6 +26,7 @@ from wsgiref.headers import Headers
 from collections.abc import MutableMapping as DictMixin
 import tempfile
 import functools
+from math import inf
 
 
 ##
@@ -111,22 +112,26 @@ class MultiDict(DictMixin):
         self.append(key, value)
 
     def append(self, key, value):
+        """ Add an additional value to a key. """
         self.dict.setdefault(key, []).append(value)
 
     def replace(self, key, value):
+        """ Replace all values for a key with a single value. """
         self.dict[key] = [value]
 
     def getall(self, key):
+        """ Return a list with all values for a key. The list may be empty. """
         return self.dict.get(key) or []
 
     def get(self, key, default=None, index=-1):
+        # Not documented because it's likely to change.
         if key not in self.dict and default != KeyError:
             return [default][index]
 
         return self.dict[key][index]
 
     def iterallitems(self):
-        """ Yield (key, value) keys, but for all values. """
+        """ Yield (key, value) pairs with repeating keys for each value. """
         for key, values in self.dict.items():
             for value in values:
                 yield key, value
@@ -283,8 +288,8 @@ class PushMultipartParser:
         content_length=-1,
         max_header_size=4096 + 128,  # 4KB should be enough for everyone
         max_header_count=8,  # RFC 7578 allows just 3
-        max_segment_size=2**64,  # Practically unlimited
-        max_segment_count=2**64,  # Practically unlimited
+        max_segment_size=inf,  # unlimited
+        max_segment_count=inf,  # unlimited
         header_charset="utf8",
         strict=False,
     ):
@@ -299,10 +304,10 @@ class PushMultipartParser:
         limit will trigger a :exc:`ParserLimitReached` exception.
 
         :param boundary: The multipart boundary as found in the Content-Type header.
-        :param content_length: Maximum number of bytes to parse, or -1 for no limit.
-        :param max_header_size: Maximum size of a single header (name+value).
+        :param content_length: Expected input size in bytes, or -1 if unknown.
+        :param max_header_size: Maximum length of a single header line (name and value).
         :param max_header_count: Maximum number of headers per segment.
-        :param max_segment_size: Maximum size of a single segment.
+        :param max_segment_size: Maximum size of a single segment body.
         :param max_segment_count: Maximum number of segments.
         :param header_charset: Charset for header names and values.
         :param strict: Enables additional format and sanity checks.
@@ -325,10 +330,11 @@ class PushMultipartParser:
         self._current = None
         self._state = _PREAMBLE
 
-        #: True if the parser was closed.
+        #: True if the parser reached the end of the multipart stream, stopped
+        #: parsing due to an :attr:`error`, or :meth:`<close>` was called.
         self.closed = False
-        #: The last error
-        self.error = None
+        #: A :exc:`MultipartError` instance if parsing failed.
+        self.error: Optional[MultipartError] = None
 
     def __enter__(self):
         return self
@@ -346,7 +352,7 @@ class PushMultipartParser:
         of :class:`MultipartSegment` with all headers already present,
         followed by zero or more non-empty `bytearray` instances containing
         parts of the segment body, followed by a single `None` signaling the
-        end of the segment.
+        end of the current segment.
 
         The returned iterator will stop if more data is required or if the end
         of the multipart stream was detected. The iterator must be fully consumed
@@ -499,7 +505,7 @@ class PushMultipartParser:
         """
         Close this parser if not already closed.
 
-        :param check_complete: Raise MultipartError if the parser did not
+        :param check_complete: Raise :exc:`ParserError` if the parser did not
             reach the end of the multipart stream yet.
         """
 
@@ -515,33 +521,35 @@ class PushMultipartParser:
 
 
 class MultipartSegment:
+    """ A :class:`MultipartSegment` represents the header section of a single
+    multipart part and provides convenient access to part headers and other
+    details (e.g. :attr:`name` and :attr:`filename`). Each segment also
+    tracks its own content :attr:`size` while the :class:`PushMultipartParser`
+    processes more data, and is marked as :attr:`complete` as soon as the
+    next multipart border is found. Segments do not store or buffer any of
+    their content data, though. 
+    """
 
     #: List of headers as name/value pairs with normalized (Title-Case) names.
     headerlist: List[Tuple[str, str]]
-    #: The 'name' option of the Content-Disposition header. Always a string,
+    #: The 'name' option of the `Content-Disposition` header. Always a string,
     #: but may be empty.
     name: str
-    #: The optional 'filename' option of the Content-Disposition header.
+    #: The optional 'filename' option of the `Content-Disposition` header.
     filename: Optional[str]
-    #: The Content-Type of this segment, if the header was present.
-    #: Not the entire header, just the actual content type without options.
+    #: The cleaned up `Content-Type` segment header, if present. The value is
+    #: lower-cased and header options (e.g. charset) are removed.
     content_type: Optional[str]
-    #: The 'charset' option of the Content-Type header, if present.
+    #: The 'charset' option of the `Content-Type` header, if present.
     charset: Optional[str]
 
     #: Segment body size (so far). Will be updated during parsing.
     size: int
-    #: If true, the last chunk of segment body data was parsed and the size
-    #: value is final.
+    #: If true, the segment content was fully parsed and the size value is final.
     complete: bool
 
     def __init__(self, parser: PushMultipartParser):
-        """ MultipartSegments are created by the PushMultipartParser and
-        represent a single multipart segment, but do not store or buffer any
-        of the content. The parser will emit MultipartSegments with a fully
-        populated headerlist and derived information (name, filename, ...) can
-        be accessed.
-        """
+        """ Private constructor, used by :class:`PushMultipartParser` """
         self._parser = parser
 
         if parser._fieldcount+1 > parser.max_segment_count:
@@ -632,7 +640,7 @@ class MultipartSegment:
         return default
 
     def __getitem__(self, name):
-        """Return a header value if present, or raise KeyError."""
+        """Return a header value if present, or raise :exc:`KeyError`."""
         return self.header(name, KeyError)
 
 
@@ -653,38 +661,38 @@ class MultipartParser(object):
         header_limit=8,
         headersize_limit=1024 * 4 + 128,  # 4KB
         part_limit=128,
-        partsize_limit=2**64,  # practically unlimited
+        partsize_limit=inf,  # unlimited
         spool_limit=1024 * 64,  # Keep fields up to 64KB in memory
         memory_limit=1024 * 64 * 128,  # spool_limit * part_limit
-        disk_limit=2**64,  # practically unlimited
+        disk_limit=inf,  # unlimited
         mem_limit=0,
         memfile_limit=0,
     ):
-        """A parser that reads from a multipart/form-data encoded byte stream
+        """A parser that reads from a `multipart/form-data` encoded byte stream
         and yields :class:`MultipartPart` instances.
 
-        The parse itself is an iterator and will read and parse data on
-        demand. results are cached, so once fully parsed, it can be iterated
-        over again.
+        The parse acts as a lazy iterator and will only read and parse as much
+        data as needed to return the next part. Results are cached and the same
+        part can be requested multiple times without extra cost.
 
-        :param stream: A readable byte stream. Must implement ``.read(size)``.
+        :param stream: A readable byte stream or any other object that implements
+          a :meth:`read(size) <io.BufferedIOBase.read>` method.
         :param boundary: The multipart boundary as found in the Content-Type header.
-        :param content_length: The maximum number of bytes to read.
+
         :param charset: Default charset for headers and text fields.
         :param strict: Enables additional format and sanity checks.
-        :param buffer_size: Size of chunks read from the source stream
+        :param buffer_size: Chunk size when reading from the source stream.
 
-        :param header_limit: Maximum number of headers per segment
-        :param headersize_limit: Maximum size of a segment header line
-        :param part_limit: Maximum number of segments to parse
-        :param partsize_limit: Maximum size of a segment body
-        :param spool_limit: Segments up to this size are buffered in memory,
-            larger segments are buffered in temporary files on disk.
-        :param memory_limit: Maximum size of all memory-buffered segments.
-        :param disk_limit: Maximum size of all disk-buffered segments
-
-        :param memfile_limit: Deprecated alias for `spool_limit`.
-        :param mem_limit: Deprecated alias for `memory_limit`.
+        :param header_limit: Maximum number of headers per part.
+        :param headersize_limit: Maximum length of a single header line (name and value).
+        :param part_limit: Maximum number of parts.
+        :param partsize_limit: Maximum content size of a single parts.
+        :param spool_limit: Parts up to this size are buffered in memory and count
+          towards `memory_limit`. Larger parts are spooled to temporary files on
+          disk and count towards `disk_limit`.
+        :param memory_limit: Maximum size of all memory-buffered parts. Should
+          be smaller than ``spool_limit * part_limit`` to have an effect.
+        :param disk_limit: Maximum size of all disk-buffered parts.
         """
         self.stream = stream
         self.boundary = boundary
@@ -704,7 +712,8 @@ class MultipartParser(object):
         self._part_iter = None
 
     def __iter__(self):
-        """Iterate over the parts of the multipart message."""
+        """ Parse the multipart stream and yield :class:`MultipartPart`
+            instances as soon as they are available. """
         if not self._part_iter:
             self._part_iter = self._iterparse()
 
@@ -716,11 +725,13 @@ class MultipartParser(object):
             yield part
 
     def parts(self):
-        """Returns a list with all parts of the multipart message."""
+        """ Parse the entire multipart stream and return all :class:`MultipartPart`
+        instances as a list. """
         return list(self)
 
     def get(self, name, default=None):
-        """Return the first part with that name or a default value."""
+        """ Return the first part with a given name, or the default value if no
+        matching part exists. """
         for part in self:
             if name == part.name:
                 return part
@@ -728,7 +739,7 @@ class MultipartParser(object):
         return default
 
     def get_all(self, name):
-        """Return a list of parts with that name."""
+        """ Return all parts with the given name. """
         return [p for p in self if p.name == name]
 
     def _iterparse(self):
@@ -783,6 +794,12 @@ class MultipartParser(object):
 
 
 class MultipartPart(object):
+    """ A :class:`MultipartPart` represents a fully parsed multipart part
+        and provides convenient access to part headers and other details (e.g.
+        :attr:`name` and :attr:`filename`) as well as its memory- or disk-buffered
+        binary or text content.
+    """
+
     def __init__(
         self,
         buffer_size=2**16,
@@ -790,14 +807,22 @@ class MultipartPart(object):
         charset="utf8",
         segment: "MultipartSegment" = None,
     ):
+        
+        """ Private constructor, used by :class:`MultipartParser` """
+
         self._segment = segment
-        #: A file-like object holding the fields content
+        #: A file-like buffer holding the parts binary content, or None if this
+        #: part was :meth:`closed <close>`.
         self.file = BytesIO()
+        #: Part size in bytes.
         self.size = 0
+        #: Part name.
         self.name = segment.name
+        #: Part filename (if defined).
         self.filename = segment.filename
-        #: Charset as defined in the segment header, or the parser default charset
+        #: Charset as defined in the part header, or the parser default charset.
         self.charset = segment.charset or charset
+        #: All part headers as a list of (name, value) pairs.
         self.headerlist = segment.headerlist
 
         self.memfile_limit = memfile_limit
@@ -805,14 +830,20 @@ class MultipartPart(object):
 
     @_cached_property
     def headers(self) -> Headers:
+        """ A convenient dict-like holding all part headers. """
         return Headers(self._segment.headerlist)
 
     @_cached_property
     def disposition(self) -> str:
+        """ The value of the `Content-Disposition` part header. """
         return self._segment.header("Content-Disposition")
 
     @_cached_property
     def content_type(self) -> str:
+        """ Cleaned up content type provided for this part, or a sensible
+            default (`application/octet-stream` for files and `text/plain` for
+            text fields).
+        """
         return self._segment.content_type or (
             "application/octet-stream" if self.filename else "text/plain")
 
@@ -833,14 +864,16 @@ class MultipartPart(object):
         self.file.seek(0)
 
     def is_buffered(self):
-        """Return true if the data is fully buffered in memory."""
+        """ Return true if :attr:`file` is memory-buffered, or false if the part
+            was larger than the `spool_limit` and content was spooled to
+            temporary files on disk. """
         return isinstance(self.file, BytesIO)
 
     @property
     def value(self):
-        """Return the entire payload as decoded text.
+        """Return the entire payload as a decoded text string.
 
-        Warning, this may consume a lot of memory, check size first.
+        Warning, this may consume a lot of memory, check :attr:`size` first.
         """
 
         return self.raw.decode(self.charset)
@@ -849,7 +882,7 @@ class MultipartPart(object):
     def raw(self):
         """Return the entire payload as a raw byte string.
 
-        Warning, this may consume a lot of memory, check size first.
+        Warning, this may consume a lot of memory, check :attr:`size` first.
         """
         pos = self.file.tell()
         self.file.seek(0)
@@ -859,7 +892,10 @@ class MultipartPart(object):
         return val
 
     def save_as(self, path):
-        """Save a copy of this part to `path` and return its size."""
+        """ Save a copy of this part to `path` and return the number of bytes
+            written.
+        """
+
         with open(path, "wb") as fp:
             pos = self.file.tell()
             try:
@@ -870,6 +906,7 @@ class MultipartPart(object):
         return size
 
     def close(self):
+        """ Close :attr:`file` and set it to `None` to free up resources. """
         if self.file:
             self.file.close()
             self.file = False

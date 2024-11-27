@@ -4,6 +4,8 @@ API Reference
 
 .. py:currentmodule:: multipart
 
+.. automodule:: multipart
+
 SansIO Parser
 =============
 
@@ -12,12 +14,16 @@ SansIO Parser
 
 .. autoclass:: MultipartSegment
     :members:
+    :special-members: __getitem__
 
 Stream Parser
 =============
 
+
 .. autoclass:: MultipartParser
     :members:
+    :special-members: __iter__, __getitem__
+
 
 .. autoclass:: MultipartPart
     :members:
@@ -27,6 +33,9 @@ WSGI Helper
 
 .. autofunction:: is_form_request
 .. autofunction:: parse_form_data
+
+.. autoclass:: MultiDict
+    :members:
 
 Header utils
 ============

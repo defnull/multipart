@@ -21,7 +21,11 @@ coverage: venv
 
 .PHONY: docs
 docs: venv
-	cd docs; ../$(VENV)/bin/sphinx-build -M html . ../build/docs  
+	$(VENV)/bin/sphinx-build -M html docs build/docs  
+
+.PHONY: watchdocs
+watchdocs: venv
+	$(VENV)/bin/sphinx-autobuild -a --watch . -b html docs build/docs/watch/
 
 upload: build
 	$(VENV)/bin/python3 -m twine upload --skip-existing dist/multipart-*
