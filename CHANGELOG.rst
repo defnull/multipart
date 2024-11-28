@@ -10,6 +10,11 @@ changes, even if they technically change behavior from *incorrect* to *correct*
 and may break applications that rely on *incorrect* or *undefined* behavior or
 *undocumented* APIs.
 
+Release 1.3
+===========
+
+*Not released yet, no changes yet.*
+
 Release 1.2
 ===========
 
