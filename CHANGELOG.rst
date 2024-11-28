@@ -7,13 +7,15 @@ exception that behavior changes are allowed in minor releases as long as the
 change corrects behavior to match documentation, specification or
 expectation. In other words: Bugfixes do not count as backward incompatible
 changes, even if they technically change behavior from *incorrect* to *correct*
-and may break applications that rely on *incorrect* or *undefined* behavior.
+and may break applications that rely on *incorrect* or *undefined* behavior or
+*undocumented* APIs.
 
 Release 1.2
 ===========
 
-This release improves error handling, fixes several parser edge-cases and adds
-new functionality. API changes are backwards compatible.
+This release improves error handling, documentation and performance, fixes
+several parser edge-cases and adds new functionality. API changes are backwards
+compatible.
 
 * feat: Split up `MultipartError`` into more specific exceptions and add HTTP
   status code hints. All exceptions are subclasses of `MultipartError`.
@@ -34,6 +36,10 @@ new functionality. API changes are backwards compatible.
 * fix: Fail if stream ends without finding any boundary at all.
 * fix: Use modern WHATWG quoting rules for field names and filenames (#60).
   Legacy quoting is still supported as a fallback.
+* fix: `MultiDict.get(index=999)` should return default value, not throw IndexError.
+* docs: Lots of work on docs and docstrings.
+* perf: Multiple small performance improvements
+* build: Require Python 3.8
 
 Release 1.1
 ===========
