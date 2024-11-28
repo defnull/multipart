@@ -26,9 +26,9 @@ classifiers = [
 
 [project.urls]
 PyPI = "https://pypi.org/project/multipart/"
-Homepage = "https://github.com/defnull/multipart"
-Documentation = "https://github.com/defnull/multipart?tab=readme-ov-file#parser-for-multipartform-data"
-Changelog = "https://github.com/defnull/multipart/blob/master/CHANGELOG.rst"
+Homepage = "https://multipart.readthedocs.io/"
+Documentation = "https://multipart.readthedocs.io/"
+Changelog = "https://multipart.readthedocs.io/en/latest/changelog.html"
 Source = "https://github.com/defnull/multipart"
 Issues = "https://github.com/defnull/multipart/issues"
 
