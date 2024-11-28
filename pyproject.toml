@@ -40,7 +40,8 @@ dev = [
     "twine",
 ]
 docs = [
-    "Sphinx>=8,<9",
+    "sphinx>=8,<9",
+    "sphinx-autobuild",
 ]
 
 [tool.flit.sdist]
