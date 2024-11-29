@@ -10,7 +10,7 @@ License: MIT (see LICENSE file)
 
 
 __author__ = "Marcel Hellkamp"
-__version__ = '1.2.0'
+__version__ = '1.2.1'
 __license__ = "MIT"
 __all__ = ["MultipartError", "ParserLimitReached", "ParserError",
            "StrictParserError", "ParserStateError", "is_form_request",
