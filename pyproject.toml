@@ -47,8 +47,10 @@ docs = [
 [tool.flit.sdist]
 include = [
   "test/*.py",
+  "README.rst",
   "MAINTAINERS.rst",
-  "CHANGELOG.rst"
+  "CHANGELOG.rst",
+  "LICENSE"
 ]
 
 [tool.pytest.ini_options]
