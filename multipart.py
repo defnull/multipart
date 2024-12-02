@@ -168,7 +168,8 @@ class _cached_property:
         self.func = func
 
     def __get__(self, obj, cls):
-        if obj is None: return self  # pragma: no cover
+        if obj is None:  # pragma: no cover
+            return self
         value = obj.__dict__[self.func.__name__] = self.func(obj)
         return value
 
@@ -512,7 +513,7 @@ class PushMultipartParser:
         self._current = None
         del self._buffer[:]
 
-        if check_complete and not self._state is _COMPLETE:
+        if check_complete and self._state is not _COMPLETE:
             err = ParserError("Unexpected end of multipart stream (parser closed)")
             if not self.error:
                 self.error = err
