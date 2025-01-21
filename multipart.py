@@ -884,6 +884,9 @@ class MultipartPart(object):
 
         Warning, this may consume a lot of memory, check :attr:`size` first.
         """
+        if self.file is None:
+            raise MultipartError("Cannot read from closed MultipartPart")
+
         pos = self.file.tell()
         self.file.seek(0)
 
@@ -895,6 +898,8 @@ class MultipartPart(object):
         """ Save a copy of this part to `path` and return the number of bytes
             written.
         """
+        if self.file is None:
+            raise MultipartError("Cannot read from closed MultipartPart")
 
         with open(path, "wb") as fp:
             pos = self.file.tell()

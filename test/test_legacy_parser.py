@@ -197,5 +197,12 @@ class TestMultipartParser(BaseParserTest):
         file1.close()
         self.assertIsNone(file1.file)
 
+        with self.assertMultipartError("Cannot read from closed MultipartPart"):
+            file1.raw
+        with self.assertMultipartError("Cannot read from closed MultipartPart"):
+            file1.value
+        with self.assertMultipartError("Cannot read from closed MultipartPart"):
+            file1.save_as("/tmp/foo")
+
         # Closing again is a NOP
         file1.close() # Do nothing
