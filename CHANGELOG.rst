@@ -13,7 +13,9 @@ and may break applications that rely on *incorrect* or *undefined* behavior or
 Release 1.3
 ===========
 
-*Not released yet, no changes yet.*
+**Not released yet**
+
+* feat: Nicer error messages when reading from a closed ``MultipartPart``.
 
 Release 1.2
 ===========
@@ -22,26 +24,26 @@ This release improves error handling, documentation and performance, fixes
 several parser edge-cases and adds new functionality. API changes are backwards
 compatible.
 
-* feat: Split up `MultipartError`` into more specific exceptions and add HTTP
-  status code hints. All exceptions are subclasses of `MultipartError`.
-* feat: New `parse_form_data(ignore_errors)` parameter to throw exceptions in
+* feat: Split up ``MultipartError`` into more specific exceptions and add HTTP
+  status code hints. All exceptions are subclasses of ``MultipartError``.
+* feat: New ``parse_form_data(ignore_errors)`` parameter to throw exceptions in
   non-strict mode, or suppress exceptions in strict mode. Default behavior does
   not change (throw in strict-mode, ignore in non-strict mode).
-* feat: New `is_form_request(environ)` helper.
-* feat: New specialized `content_disposition_[un]quote` functions.
-* feat: `parse_options_header()` can now use different unquote functions. The
+* feat: New ``is_form_request(environ)`` helper.
+* feat: New specialized ``content_disposition_[un]quote`` functions.
+* feat: ``parse_options_header()`` can now use different unquote functions. The
   default does not change.
-* fix: `parse_form_data()` no longer checks the request method and the new
-  `is_form_request` function also ignores it. All methods can carry parse-able
+* fix: ``parse_form_data()`` no longer checks the request method and the new
+  ``is_form_request`` function also ignores it. All methods can carry parse-able
   form data, including unknown methods. The only reliable way is to check the
-  `Content-Type` header, which both functions do.
+  ``Content-Type`` header, which both functions do.
 * fix: First boundary not detected if separated by chunk border.
 * fix: Allow CRLF in front of first boundary, even in strict mode.
 * fix: Fail fast if first boundary is broken or part of the preamble.
 * fix: Fail if stream ends without finding any boundary at all.
 * fix: Use modern WHATWG quoting rules for field names and filenames (#60).
   Legacy quoting is still supported as a fallback.
-* fix: `MultiDict.get(index=999)` should return default value, not throw IndexError.
+* fix: ``MultiDict.get(index=999)`` should return default value, not throw IndexError.
 * docs: Lots of work on docs and docstrings.
 * perf: Multiple small performance improvements
 * build: Require Python 3.8
