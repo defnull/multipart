@@ -909,7 +909,7 @@ class MultipartPart(object):
         """ Close :attr:`file` and set it to `None` to free up resources. """
         if self.file:
             self.file.close()
-            self.file = False
+            self.file = None
 
 
 ##############################################################################
