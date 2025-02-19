@@ -16,6 +16,9 @@ Release 1.3
 **Not released yet**
 
 * feat: Nicer error messages when reading from a closed ``MultipartPart``.
+* feat: Support custom `MultipartSegment` subclasses to be used and emitted by
+  `PushMultipartParser`. However, the API between parser and segment is not
+  stable yet. Overriding any of the ``_on_*`` methods may break during releases.
 
 Release 1.2
 ===========
