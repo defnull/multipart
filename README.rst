@@ -10,6 +10,10 @@ Python multipart/form-data parser
     :target: https://pypi.python.org/pypi/multipart/
     :alt: Latest Version
 
+.. image:: https://img.shields.io/pypi/pyversions/multipart.svg?color=%2334D058
+    :target: https://pypi.python.org/pypi/multipart/
+    :alt: Supported Python Version
+
 .. image:: https://img.shields.io/pypi/l/multipart.svg
     :target: https://pypi.python.org/pypi/multipart/
     :alt: License
