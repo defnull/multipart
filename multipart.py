@@ -649,7 +649,7 @@ class MultipartSegment:
 ##############################################################################
 
 
-class MultipartParser(object):
+class MultipartParser:
     def __init__(
         self,
         stream,
@@ -793,7 +793,7 @@ class MultipartParser(object):
                         part = None
 
 
-class MultipartPart(object):
+class MultipartPart:
     """ A :class:`MultipartPart` represents a fully parsed multipart part
         and provides convenient access to part headers and other details (e.g.
         :attr:`name` and :attr:`filename`) as well as its memory- or disk-buffered
