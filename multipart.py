@@ -777,6 +777,7 @@ class MultipartParser:
                             segment=event,
                         )
                     elif event:
+                        assert part
                         part._write(event)
                         if part.is_buffered():
                             if part.size + mem_used > self.memory_limit:
@@ -784,6 +785,7 @@ class MultipartParser:
                         elif part.size + disk_used > self.disk_limit:
                             raise ParserLimitReached("Disk limit reached")
                     else:
+                        assert part
                         if part.is_buffered():
                             mem_used += part.size
                         else:
