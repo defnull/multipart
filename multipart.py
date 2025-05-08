@@ -771,10 +771,10 @@ class MultipartParser:
                 for event in parser.parse(chunk):
                     if isinstance(event, MultipartSegment):
                         part = MultipartPart(
+                            event,
                             buffer_size=self.buffer_size,
                             memfile_limit=self.spool_limit,
                             charset=self.charset,
-                            segment=event,
                         )
                     elif event:
                         assert part
@@ -804,10 +804,10 @@ class MultipartPart:
 
     def __init__(
         self,
+        segment: "MultipartSegment",
         buffer_size=2**16,
         memfile_limit=2**18,
         charset="utf8",
-        segment: "MultipartSegment" = None,
     ):
         
         """ Private constructor, used by :class:`MultipartParser` """

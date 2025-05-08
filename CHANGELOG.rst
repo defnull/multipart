@@ -16,6 +16,9 @@ Release 1.3
 **Not released yet**
 
 * feat: Nicer error messages when reading from a closed ``MultipartPart``.
+* change: ``segment`` is now a required constructor argument for ``MultipartPart``
+  and changed position. The constructor is not part of the public API, so this
+  should not break user code.
 
 Release 1.2
 ===========
