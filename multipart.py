@@ -193,7 +193,7 @@ class _cached_property:
 
 # ASCII minus control or special chars
 _token = "[a-zA-Z0-9-!#$%&'*+.^_`|~]+"
-_re_istoken = re.compile("^%s$" % _token, re.ASCII)
+_re_token = re.compile("^%s$" % _token, re.ASCII)
 # A token or quoted-string (simple qs | token | slow qs)
 _value = r'"[^\\"]*"|%s|"(?:\\.|[^"])*"' % _token
 # A "; key=value" pair from content-disposition header
@@ -207,7 +207,7 @@ def header_quote(val):
     Note: This is NOT the way modern browsers quote field names or filenames
     in Content-Disposition headers. See :func:`content_disposition_quote`
     """
-    if _re_istoken.match(val):
+    if _re_token.match(val):
         return val
 
     return '"' + val.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -497,7 +497,7 @@ class PushMultipartParser:
                                 continue
 
                     # Keep enough in buffer to accout for a partial delimiter at
-                    # the end, but emiot the rest.
+                    # the end, but emit the rest.
                     chunk_end = bufferlen - (d_len + 1)
                     assert chunk_end > offset  # Always true
                     self._current._update_size(chunk_end - offset)
