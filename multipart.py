@@ -399,7 +399,7 @@ class PushMultipartParser:
 
                     if index > -1:
                         # Boundary must be at position zero, or start with CRLF
-                        if index > 0 and not (index >= 2 and buffer[index-2:index] == b"\r\n"):
+                        if index > 0 and buffer[index - 2 : index] != b"\r\n":
                             raise ParserError("Unexpected byte in front of first boundary")
 
                         next_start = index + d_len
