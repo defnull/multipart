@@ -12,8 +12,12 @@ Python multipart/form-data parser
     :target: https://pypi.python.org/pypi/multipart/
     :alt: Latest Version
 
-.. image:: https://img.shields.io/pypi/l/multipart.svg
+.. image:: https://img.shields.io/pypi/pyversions/multipart.svg?color=%2334D058
     :target: https://pypi.python.org/pypi/multipart/
+    :alt: Supported Python Version
+
+.. image:: https://img.shields.io/pypi/l/multipart.svg
+    :target: https://github.com/defnull/multipart/
     :alt: License
 
 .. _HTML5: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#multipart-form-data
@@ -70,6 +74,8 @@ Table of Content
     usage
     api
     changelog
+
+    Source on GitHub <https://github.com/defnull/multipart>
 
 License
 =======

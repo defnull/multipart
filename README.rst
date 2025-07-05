@@ -15,7 +15,7 @@ Python multipart/form-data parser
     :alt: Supported Python Version
 
 .. image:: https://img.shields.io/pypi/l/multipart.svg
-    :target: https://pypi.python.org/pypi/multipart/
+    :target: https://github.com/defnull/multipart/
     :alt: License
 
 .. _HTML5: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#multipart-form-data
