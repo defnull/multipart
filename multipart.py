@@ -4,7 +4,7 @@ This module provides multiple parsers for RFC-7578 `multipart/form-data`,
 both low-level for framework authors and high-level for WSGI application
 developers.
 
-Copyright (c) 2010-2024, Marcel Hellkamp
+Copyright (c) 2010-2025, Marcel Hellkamp
 License: MIT (see LICENSE file)
 """
 
