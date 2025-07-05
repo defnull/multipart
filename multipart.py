@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-This module provides multiple parsers for RFC-7578 `multipart/form-data`,
-both low-level for framework authors and high-level for WSGI application
-developers.
+This module provides multiple parsers for RFC-7578 `multipart/form-data`, both
+low-level for framework authors and high-level for WSGI application developers.
 
 Copyright (c) 2010-2025, Marcel Hellkamp
 License: MIT (see LICENSE file)
@@ -10,12 +9,21 @@ License: MIT (see LICENSE file)
 
 
 __author__ = "Marcel Hellkamp"
-__version__ = '1.3.0-dev'
+__version__ = "1.3.0-dev"
 __license__ = "MIT"
-__all__ = ["MultipartError", "ParserLimitReached", "ParserError",
-           "StrictParserError", "ParserStateError", "is_form_request",
-           "parse_form_data", "MultipartParser", "MultipartPart",
-           "PushMultipartParser", "MultipartSegment"]
+__all__ = [
+    "MultipartError",
+    "ParserLimitReached",
+    "ParserError",
+    "StrictParserError",
+    "ParserStateError",
+    "is_form_request",
+    "parse_form_data",
+    "MultipartParser",
+    "MultipartPart",
+    "PushMultipartParser",
+    "MultipartSegment",
+]
 
 
 import re
@@ -35,30 +43,34 @@ from math import inf
 
 
 class MultipartError(ValueError):
-    """ Base class for all parser errors or warnings """
+    """Base class for all parser errors or warnings"""
 
     #: Suitable HTTP status code for this exception
-    http_status = 500 # Internal Error
+    http_status = 500  # Internal Error
 
 
 class ParserError(MultipartError):
-    """ Detected invalid input """
-    http_status = 415 # Unsupported Media Type
+    """Detected invalid input"""
+
+    http_status = 415  # Unsupported Media Type
 
 
 class StrictParserError(ParserError):
-    """ Detected unusual input while parsing in strict mode """
-    http_status = 415 # Unsupported Media Type
+    """Detected unusual input while parsing in strict mode"""
+
+    http_status = 415  # Unsupported Media Type
 
 
 class ParserLimitReached(MultipartError):
-    """ Parser reached one of the configured limits """
-    http_status = 413 # Request Entity Too Large
+    """Parser reached one of the configured limits"""
+
+    http_status = 413  # Request Entity Too Large
 
 
 class ParserStateError(MultipartError):
-    """ Parser reachend an invalid state (e.g. use after close) """
-    http_status = 500 # Internal Error
+    """Parser reachend an invalid state (e.g. use after close)"""
+
+    http_status = 500  # Internal Error
 
 
 ##############################################################################
@@ -68,14 +80,14 @@ class ParserStateError(MultipartError):
 
 
 class MultiDict(DictMixin):
-    """ A dict that stores multiple values per key. Most dict methods return the
-        last value by default. There are special methods to get all values.
+    """A dict that stores multiple values per key. Most dict methods return the
+    last value by default. There are special methods to get all values.
     """
 
     def __init__(self, *args, **kwargs):
         self.dict = {}
         for arg in args:
-            if hasattr(arg, 'items'):
+            if hasattr(arg, "items"):
                 for k, v in arg.items():
                     self[k] = v
             else:
@@ -112,15 +124,15 @@ class MultiDict(DictMixin):
         self.append(key, value)
 
     def append(self, key, value):
-        """ Add an additional value to a key. """
+        """Add an additional value to a key."""
         self.dict.setdefault(key, []).append(value)
 
     def replace(self, key, value):
-        """ Replace all values for a key with a single value. """
+        """Replace all values for a key with a single value."""
         self.dict[key] = [value]
 
     def getall(self, key):
-        """ Return a list with all values for a key. The list may be empty. """
+        """Return a list with all values for a key. The list may be empty."""
         return self.dict.get(key) or []
 
     def get(self, key, default=None, index=-1):
@@ -130,7 +142,7 @@ class MultiDict(DictMixin):
             return default
 
     def iterallitems(self):
-        """ Yield (key, value) pairs with repeating keys for each value. """
+        """Yield (key, value) pairs with repeating keys for each value."""
         for key, values in self.dict.items():
             for value in values:
                 yield key, value
@@ -143,8 +155,8 @@ def to_bytes(data, enc="utf8"):
     return data
 
 
-def copy_file(stream, target, maxread=-1, buffer_size=2 ** 16):
-    """ Read from :stream and write to :target until :maxread or EOF. """
+def copy_file(stream, target, maxread=-1, buffer_size=2**16):
+    """Read from :stream and write to :target until :maxread or EOF."""
     size, read = 0, stream.read
 
     while True:
@@ -159,9 +171,9 @@ def copy_file(stream, target, maxread=-1, buffer_size=2 ** 16):
 
 
 class _cached_property:
-    """ A property that is only computed once per instance and then replaces
-        itself with an ordinary attribute. Deleting the attribute resets the
-        property. """
+    """A property that is only computed once per instance and then replaces
+    itself with an ordinary attribute. Deleting the attribute resets the
+    property."""
 
     def __init__(self, func):
         functools.update_wrapper(self, func)  # type: ignore
@@ -180,19 +192,20 @@ class _cached_property:
 
 
 # ASCII minus control or special chars
-_token="[a-zA-Z0-9-!#$%&'*+.^_`|~]+" 
+_token = "[a-zA-Z0-9-!#$%&'*+.^_`|~]+"
 _re_istoken = re.compile("^%s$" % _token, re.ASCII)
 # A token or quoted-string (simple qs | token | slow qs)
 _value = r'"[^\\"]*"|%s|"(?:\\.|[^"])*"' % _token
 # A "; key=value" pair from content-disposition header
-_option = r'; *(%s) *= *(%s)' % (_token, _value)
+_option = r"; *(%s) *= *(%s)" % (_token, _value)
 _re_option = re.compile(_option)
 
-def header_quote(val):
-    """ Quote header option values if necessary.
 
-        Note: This is NOT the way modern browsers quote field names or filenames
-        in Content-Disposition headers. See :func:`content_disposition_quote`
+def header_quote(val):
+    """Quote header option values if necessary.
+
+    Note: This is NOT the way modern browsers quote field names or filenames
+    in Content-Disposition headers. See :func:`content_disposition_quote`
     """
     if _re_istoken.match(val):
         return val
@@ -201,10 +214,10 @@ def header_quote(val):
 
 
 def header_unquote(val, filename=False):
-    """ Unquote header option values.
+    """Unquote header option values.
 
-        Note: This is NOT the way modern browsers quote field names or filenames
-        in Content-Disposition headers. See :func:`content_disposition_unquote`
+    Note: This is NOT the way modern browsers quote field names or filenames
+    in Content-Disposition headers. See :func:`content_disposition_unquote`
     """
     if val[0] == val[-1] == '"':
         val = val[1:-1]
@@ -219,20 +232,20 @@ def header_unquote(val, filename=False):
 
 
 def content_disposition_quote(val):
-    """ Quote field names or filenames for Content-Disposition headers the
-        same way modern browsers do it (see WHATWG HTML5 specification).
+    """Quote field names or filenames for Content-Disposition headers the same
+    way modern browsers do it (see WHATWG HTML5 specification).
     """
     val = val.replace("\r", "%0D").replace("\n", "%0A").replace('"', "%22")
     return '"' + val + '"'
 
 
 def content_disposition_unquote(val, filename=False):
-    """ Unquote field names or filenames from Content-Disposition headers.
+    """Unquote field names or filenames from Content-Disposition headers.
 
-        Legacy quoting mechanisms are detected to some degree and also supported,
-        but there are rare ambiguous edge cases where we have to guess. If in
-        doubt, this function assumes a modern browser and follows the WHATWG
-        HTML5 specification (limited percent-encoding, no backslash-encoding).
+    Legacy quoting mechanisms are detected to some degree and also supported,
+    but there are rare ambiguous edge cases where we have to guess. If in doubt,
+    this function assumes a modern browser and follows the WHATWG HTML5
+    specification (limited percent-encoding, no backslash-encoding).
     """
 
     if '"' == val[0] == val[-1]:
@@ -250,11 +263,11 @@ def content_disposition_unquote(val, filename=False):
 
 
 def parse_options_header(header, options=None, unquote=header_unquote):
-    """ Parse Content-Type (or similar) headers into a primary value 
-        and an options-dict.
+    """Parse Content-Type (or similar) headers into a primary value and an
+    options-dict.
 
-        Note: For Content-Disposition headers you need a different unquote
-        function. See `content_disposition_unquote`.
+    Note: For Content-Disposition headers you need a different unquote function.
+    See `content_disposition_unquote`.
 
     """
     i = header.find(";")
@@ -349,10 +362,10 @@ class PushMultipartParser:
         with the data given.
 
         For each multipart segment, the parser will emit a single instance
-        of :class:`MultipartSegment` with all headers already present,
-        followed by zero or more non-empty `bytearray` instances containing
-        parts of the segment body, followed by a single `None` signaling the
-        end of the current segment.
+        of :class:`MultipartSegment` with all headers already present, followed
+        by zero or more non-empty `bytearray` instances containing parts of the
+        segment body, followed by a single `None` signaling the end of the
+        current segment.
 
         The returned iterator will stop if more data is required or if the end
         of the multipart stream was detected. The iterator must be fully consumed
@@ -381,7 +394,9 @@ class PushMultipartParser:
 
             if self._state is _COMPLETE:
                 if self.strict:
-                    raise StrictParserError("Unexpected data after end of multipart stream")
+                    raise StrictParserError(
+                        "Unexpected data after end of multipart stream"
+                    )
                 return
 
             delimiter = self._delimiter
@@ -400,10 +415,12 @@ class PushMultipartParser:
                     if index > -1:
                         # Boundary must be at position zero, or start with CRLF
                         if index > 0 and buffer[index - 2 : index] != b"\r\n":
-                            raise ParserError("Unexpected byte in front of first boundary")
+                            raise ParserError(
+                                "Unexpected byte in front of first boundary"
+                            )
 
                         next_start = index + d_len
-                        tail = buffer[next_start-2 : next_start]
+                        tail = buffer[next_start - 2 : next_start]
 
                         if tail == b"\r\n":  # Normal delimiter found
                             self._state = _HEADER
@@ -445,7 +462,9 @@ class PushMultipartParser:
                         if buffer.find(b"\n", offset) != -1:
                             raise ParserError("Invalid line break in segment header")
                         if bufferlen - offset > self.max_header_size:
-                            raise ParserLimitReached("Maximum segment header length exceeded")
+                            raise ParserLimitReached(
+                                "Maximum segment header length exceeded"
+                            )
                         break  # wait for more data
 
                 elif self._state is _BODY:
@@ -456,9 +475,9 @@ class PushMultipartParser:
 
                     # Scan for delimiter (CRLF + boundary + (CRLF or '--'))
                     index = buffer.find(delimiter, offset)
-                    if index > -1: 
+                    if index > -1:
                         next_start = index + d_len + 2
-                        tail = buffer[next_start-2 : next_start]
+                        tail = buffer[next_start - 2 : next_start]
 
                         if tail == b"\r\n" or tail == b"--":
                             if index > offset:
@@ -519,13 +538,13 @@ class PushMultipartParser:
 
 
 class MultipartSegment:
-    """ A :class:`MultipartSegment` represents the header section of a single
+    """A :class:`MultipartSegment` represents the header section of a single
     multipart part and provides convenient access to part headers and other
-    details (e.g. :attr:`name` and :attr:`filename`). Each segment also
-    tracks its own content :attr:`size` while the :class:`PushMultipartParser`
-    processes more data, and is marked as :attr:`complete` as soon as the
-    next multipart border is found. Segments do not store or buffer any of
-    their content data, though. 
+    details (e.g. :attr:`name` and :attr:`filename`). Each segment also tracks
+    its own content :attr:`size` while the :class:`PushMultipartParser`
+    processes more data, and is marked as :attr:`complete` as soon as the next
+    multipart border is found. Segments do not store or buffer any of their
+    content data, though.
     """
 
     #: List of headers as name/value pairs with normalized (Title-Case) names.
@@ -547,10 +566,10 @@ class MultipartSegment:
     complete: bool
 
     def __init__(self, parser: PushMultipartParser):
-        """ Private constructor, used by :class:`PushMultipartParser` """
+        """Private constructor, used by :class:`PushMultipartParser`"""
         self._parser = parser
 
-        if parser._fieldcount+1 > parser.max_segment_count:
+        if parser._fieldcount + 1 > parser.max_segment_count:
             raise ParserLimitReached("Maximum segment count exceeded")
         parser._fieldcount += 1
 
@@ -595,13 +614,19 @@ class MultipartSegment:
     def _close_headers(self):
         assert self.name is None
 
-        for h,v in self.headerlist:
+        for h, v in self.headerlist:
             if h == "Content-Disposition":
-                dtype, args = parse_options_header(v, unquote=content_disposition_unquote)
+                dtype, args = parse_options_header(
+                    v, unquote=content_disposition_unquote
+                )
                 if dtype != "form-data":
-                    raise ParserError("Invalid Content-Disposition segment header: Wrong type")
+                    raise ParserError(
+                        "Invalid Content-Disposition segment header: Wrong type"
+                    )
                 if "name" not in args and self._parser.strict:
-                    raise StrictParserError("Invalid Content-Disposition segment header: Missing name option")
+                    raise StrictParserError(
+                        "Invalid Content-Disposition segment header: Missing name option"
+                    )
                 self.name = args.get("name", "")
                 self.filename = args.get("filename")
             elif h == "Content-Type":
@@ -710,8 +735,8 @@ class MultipartParser:
         self._part_iter = None
 
     def __iter__(self):
-        """ Parse the multipart stream and yield :class:`MultipartPart`
-            instances as soon as they are available. """
+        """Parse the multipart stream and yield :class:`MultipartPart`
+        instances as soon as they are available."""
         if not self._part_iter:
             self._part_iter = self._iterparse()
 
@@ -723,13 +748,13 @@ class MultipartParser:
             yield part
 
     def parts(self):
-        """ Parse the entire multipart stream and return all :class:`MultipartPart`
-        instances as a list. """
+        """Parse the entire multipart stream and return all :class:`MultipartPart`
+        instances as a list."""
         return list(self)
 
     def get(self, name, default=None):
-        """ Return the first part with a given name, or the default value if no
-        matching part exists. """
+        """Return the first part with a given name, or the default value if no
+        matching part exists."""
         for part in self:
             if name == part.name:
                 return part
@@ -737,7 +762,7 @@ class MultipartParser:
         return default
 
     def get_all(self, name):
-        """ Return all parts with the given name. """
+        """Return all parts with the given name."""
         return [p for p in self if p.name == name]
 
     def _iterparse(self):
@@ -794,10 +819,10 @@ class MultipartParser:
 
 
 class MultipartPart:
-    """ A :class:`MultipartPart` represents a fully parsed multipart part
-        and provides convenient access to part headers and other details (e.g.
-        :attr:`name` and :attr:`filename`) as well as its memory- or disk-buffered
-        binary or text content.
+    """A :class:`MultipartPart` represents a fully parsed multipart part and
+    provides convenient access to part headers and other details (e.g.
+    :attr:`name` and :attr:`filename`) as well as its memory- or disk-buffered
+    binary or text content.
     """
 
     def __init__(
@@ -807,8 +832,7 @@ class MultipartPart:
         memfile_limit=2**18,
         charset="utf8",
     ):
-        
-        """ Private constructor, used by :class:`MultipartParser` """
+        """Private constructor, used by :class:`MultipartParser`"""
 
         self._segment = segment
         #: A file-like buffer holding the parts binary content, or None if this
@@ -830,22 +854,23 @@ class MultipartPart:
 
     @_cached_property
     def headers(self) -> Headers:
-        """ A convenient dict-like holding all part headers. """
+        """A convenient dict-like holding all part headers."""
         return Headers(self._segment.headerlist)
 
     @_cached_property
     def disposition(self) -> str:
-        """ The value of the `Content-Disposition` part header. """
+        """The value of the `Content-Disposition` part header."""
         return self._segment.header("Content-Disposition")  # type: ignore
 
     @_cached_property
     def content_type(self) -> str:
-        """ Cleaned up content type provided for this part, or a sensible
-            default (`application/octet-stream` for files and `text/plain` for
-            text fields).
+        """Cleaned up content type provided for this part, or a sensible
+        default (`application/octet-stream` for files and `text/plain` for
+        text fields).
         """
         return self._segment.content_type or (
-            "application/octet-stream" if self.filename else "text/plain")
+            "application/octet-stream" if self.filename else "text/plain"
+        )
 
     def _write(self, chunk):
         self.size += len(chunk)
@@ -864,9 +889,9 @@ class MultipartPart:
         self.file.seek(0)  # type: ignore
 
     def is_buffered(self):
-        """ Return true if :attr:`file` is memory-buffered, or false if the part
-            was larger than the `spool_limit` and content was spooled to
-            temporary files on disk. """
+        """Return true if :attr:`file` is memory-buffered, or false if the part
+        was larger than the `spool_limit` and content was spooled to
+        temporary files on disk."""
         return isinstance(self.file, BytesIO)
 
     @property
@@ -895,8 +920,8 @@ class MultipartPart:
         return val
 
     def save_as(self, path):
-        """ Save a copy of this part to `path` and return the number of bytes
-            written.
+        """Save a copy of this part to `path` and return the number of bytes
+        written.
         """
         if self.file is None:
             raise MultipartError("Cannot read from closed MultipartPart")
@@ -911,7 +936,7 @@ class MultipartPart:
         return size
 
     def close(self):
-        """ Close :attr:`file` and set it to `None` to free up resources. """
+        """Close :attr:`file` and set it to `None` to free up resources."""
         if self.file:
             self.file.close()
             self.file = None
@@ -923,46 +948,43 @@ class MultipartPart:
 
 
 def is_form_request(environ):
-    """ Return True if the environ represents a form request that can be parsed
-        with :func:`parse_form_data`. Checks for a compatible `Content-Type`
-        header.
+    """Return True if the environ represents a form request that can be parsed
+    with :func:`parse_form_data`. Checks for a compatible `Content-Type`
+    header.
     """
 
     content_type = environ.get("CONTENT_TYPE", "")
     return content_type.split(";", 1)[0].strip().lower() in (
         "multipart/form-data",
         "application/x-www-form-urlencoded",
-        "application/x-url-encoded"
+        "application/x-url-encoded",
     )
 
 
 def parse_form_data(
-        environ,
-        charset="utf8",
-        strict=False,
-        ignore_errors=None,
-        **kwargs):
-    """ Parses both types of form data (multipart and url-encoded) from a WSGI
-        environment and returns two :class:`MultiDict` instances, one for
-        text form fields (strings) and one for file uploads (:class:`MultipartPart`
-        instances). Text fields that are too big to fit into memory limits are
-        treated as file uploads with no filename.
+    environ, charset="utf8", strict=False, ignore_errors=None, **kwargs
+):
+    """Parses both types of form data (multipart and url-encoded) from a WSGI
+    environment and returns two :class:`MultiDict` instances, one for text form
+    fields (strings) and one for file uploads (:class:`MultipartPart`
+    instances). Text fields that are too big to fit into memory limits are
+    treated as file uploads with no filename.
 
-        In case of an url-encoded form request, the total request body size is
-        limited by `memory_limit`. Larger requests will trigger an error. 
+    In case of an url-encoded form request, the total request body size is
+    limited by `memory_limit`. Larger requests will trigger an error.
 
-        :param environ: A WSGI environment dictionary. Only `wsgi.input`,
-            `CONTENT_TYPE` and `CONTENT_LENGTH` are used. 
-        :param charset: The default charset used to decode headers and text fields.
-        :param strict: Enables additional format and sanity checks.
-        :param ignore_errors: If True, suppress all exceptions. The returned
-            results may be empty or incomplete. If False, then exceptions are
-            not suppressed. A value of None (default) throws exceptions in
-            strict mode but suppresses errors in non-strict mode.
-        :param kwargs: Additional keyword arguments are forwarded to
-            :class:`MultipartParser`. This is particularly useful to change the
-            default parser limits.
-        :raises MultipartError: See `ignore_errors` parameters. 
+    :param environ: A WSGI environment dictionary. Only `wsgi.input`,
+        `CONTENT_TYPE` and `CONTENT_LENGTH` are used.
+    :param charset: The default charset used to decode headers and text fields.
+    :param strict: Enables additional format and sanity checks.
+    :param ignore_errors: If True, suppress all exceptions. The returned
+        results may be empty or incomplete. If False, then exceptions are
+        not suppressed. A value of None (default) throws exceptions in
+        strict mode but suppresses errors in non-strict mode.
+    :param kwargs: Additional keyword arguments are forwarded to
+        :class:`MultipartParser`. This is particularly useful to change the
+        default parser limits.
+    :raises MultipartError: See `ignore_errors` parameters.
     """
 
     forms, files = MultiDict(), MultiDict()
@@ -1005,7 +1027,9 @@ def parse_form_data(
             "application/x-www-form-urlencoded",
             "application/x-url-encoded",
         ):
-            mem_limit = kwargs.get("memory_limit", kwargs.get("mem_limit", 1024*64*128))
+            mem_limit = kwargs.get(
+                "memory_limit", kwargs.get("mem_limit", 1024 * 64 * 128)
+            )
             if content_length > -1:
                 if content_length > mem_limit:
                     raise ParserLimitReached("Memory limit exceeded")
