@@ -19,7 +19,7 @@ __all__ = ["MultipartError", "ParserLimitReached", "ParserError",
 
 
 import re
-from io import BytesIO
+from io import BufferedRandom, BytesIO
 from typing import Iterator, Union, Optional, Tuple, List
 from urllib.parse import parse_qs
 from wsgiref.headers import Headers
@@ -164,7 +164,7 @@ class _cached_property:
         property. """
 
     def __init__(self, func):
-        functools.update_wrapper(self, func)
+        functools.update_wrapper(self, func)  # type: ignore
         self.func = func
 
     def __get__(self, obj, cls):
@@ -327,7 +327,7 @@ class PushMultipartParser:
         self._parsed = 0
         self._fieldcount = 0
         self._buffer = bytearray()
-        self._current = None
+        self._current = MultipartSegment(self)
         self._state = _PREAMBLE
 
         #: True if the parser reached the end of the multipart stream, stopped
@@ -406,7 +406,6 @@ class PushMultipartParser:
                         tail = buffer[next_start-2 : next_start]
 
                         if tail == b"\r\n":  # Normal delimiter found
-                            self._current = MultipartSegment(self)
                             self._state = _HEADER
                             offset = next_start
                             continue
@@ -495,7 +494,7 @@ class PushMultipartParser:
                 self._parsed += offset
                 buffer[:] = buffer[offset:]
 
-        except Exception as err:
+        except MultipartError as err:
             if not self.error:
                 self.error = err
             self.close(check_complete=False)
@@ -510,7 +509,6 @@ class PushMultipartParser:
         """
 
         self.closed = True
-        self._current = None
         del self._buffer[:]
 
         if check_complete and self._state is not _COMPLETE:
@@ -558,16 +556,16 @@ class MultipartSegment:
 
         self.headerlist = []
         self.size = 0
-        self.complete = 0
+        self.complete = False
 
-        self.name = None
+        self.name = None  # type: ignore
         self.filename = None
         self.content_type = None
         self.charset = None
         self._clen = -1
         self._size_limit = parser.max_segment_size
 
-    def _add_headerline(self, line: bytearray):
+    def _add_headerline(self, line: Union[bytes, bytearray]):
         assert line and self.name is None
         parser = self._parser
 
@@ -815,7 +813,7 @@ class MultipartPart:
         self._segment = segment
         #: A file-like buffer holding the parts binary content, or None if this
         #: part was :meth:`closed <close>`.
-        self.file = BytesIO()
+        self.file: Union[BytesIO, BufferedRandom, None] = BytesIO()
         #: Part size in bytes.
         self.size = 0
         #: Part name.
@@ -838,7 +836,7 @@ class MultipartPart:
     @_cached_property
     def disposition(self) -> str:
         """ The value of the `Content-Disposition` part header. """
-        return self._segment.header("Content-Disposition")
+        return self._segment.header("Content-Disposition")  # type: ignore
 
     @_cached_property
     def content_type(self) -> str:
@@ -851,19 +849,19 @@ class MultipartPart:
 
     def _write(self, chunk):
         self.size += len(chunk)
-        self.file.write(chunk)
+        self.file.write(chunk)  # type: ignore
         if self.size > self.memfile_limit:
             old = self.file
             self.file = tempfile.TemporaryFile()
-            self.file.write(old.getvalue())
+            self.file.write(old.getvalue())  # type: ignore
             self._write = self._write_nocheck
 
     def _write_nocheck(self, chunk):
         self.size += len(chunk)
-        self.file.write(chunk)
+        self.file.write(chunk)  # type: ignore
 
     def _mark_complete(self):
-        self.file.seek(0)
+        self.file.seek(0)  # type: ignore
 
     def is_buffered(self):
         """ Return true if :attr:`file` is memory-buffered, or false if the part
