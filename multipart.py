@@ -308,6 +308,8 @@ def parse_options_header(header, options=None, unquote=header_unquote):
 ##############################################################################
 
 
+# Constants used by the parser
+_HEADER_EXPECTED = frozenset(["Content-Disposition", "Content-Type", "Content-Length"])
 # Parser states as constants
 _PREAMBLE = "PREAMBLE"
 _HEADER = "HEADER"
@@ -671,8 +673,9 @@ class PushMultipartParser:
             name = name.strip().title()
             if not col or not name:
                 raise ParserError("Malformed segment header")
-            if " " in name or not name.isascii() or not name.isprintable():
-                raise ParserError("Invalid segment header name")
+            if name not in _HEADER_EXPECTED:
+                if " " in name or not name.isascii() or not name.isprintable():
+                    raise ParserError("Invalid segment header name")
             value = value.strip()
         except UnicodeDecodeError as err:
             raise ParserError("Segment header failed to decode", err)
