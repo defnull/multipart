@@ -37,6 +37,8 @@ intersphinx_mapping = {
     "rtd": ("https://docs.readthedocs.io/en/stable/", None),
     "python": ("https://docs.python.org/3/", None),
     "sphinx": ("https://www.sphinx-doc.org/en/master/", None),
+    "twisted": ("https://docs.twisted.org/en/stable/", None),
+    "aiohttp": ("https://docs.aiohttp.org/en/stable/", None)
 }
 intersphinx_disabled_domains = ["std"]
 
@@ -69,5 +71,6 @@ html_theme_options = {
 # so a file named "default.css" will overwrite the builtin "default.css".
 #html_static_path = ["_static"]
 
-autoclass_content = 'both'
+autoclass_content = 'class'
 autodoc_member_order = 'bysource'
+autodoc_class_signature = 'separated'

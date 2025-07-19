@@ -15,6 +15,8 @@ Release 1.3
 
 **Not released yet**
 
+* feat: New convenience methods :meth:`PushMultipartParser.parse_blocking` and
+  :meth:`PushMultipartParser.parse_async`.
 * feat: Nicer error messages when reading from a closed ``MultipartPart``.
 * change: ``segment`` is now a required constructor argument for ``MultipartPart``
   and changed position. The constructor is not part of the public API, so this

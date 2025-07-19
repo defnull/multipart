@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 This module provides multiple parsers for RFC-7578 `multipart/form-data`, both
-low-level for framework authors and high-level for WSGI application developers.
+low-level for framework authors and high-level for WSGI or ASGI application
+developers.
+
+https://multipart.readthedocs.io/
 
 Copyright (c) 2010-2025, Marcel Hellkamp
 License: MIT (see LICENSE file)
@@ -28,13 +31,31 @@ __all__ = [
 
 import re
 from io import BufferedRandom, BytesIO
-from typing import Iterator, Union, Optional, Tuple, List
+from typing import (
+    Generator,
+    AsyncGenerator,
+    Union,
+    Optional,
+    Tuple,
+    List,
+    Callable,
+    Awaitable,
+)
+
 from urllib.parse import parse_qs
 from wsgiref.headers import Headers
 from collections.abc import MutableMapping as DictMixin
 import tempfile
 import functools
+import typing
 from math import inf
+
+# Type Aliases (internal use only)
+
+t_ParserEvent: "typing.TypeAlias" = Union["MultipartSegment", bytearray, None]
+t_ByteString: "typing.TypeAlias" = Union[bytes, bytearray]
+t_BlockingReader: "typing.TypeAlias" = Callable[[int], t_ByteString]
+t_AsyncReader: "typing.TypeAlias" = Callable[[int], Awaitable[t_ByteString]]
 
 
 ##
@@ -295,9 +316,27 @@ _COMPLETE = "END"
 
 
 class PushMultipartParser:
+    """An incremental non-blocking parser for multipart/form-data.
+
+    This class provides a non-blocking :meth:`parse` method as well as several
+    convenience methods to parse blocking or async data streams.
+
+    **Strict mode**: In `strict` mode, the parser will be less forgiving and
+    bail out more quickly when presented with strange or invalid input,
+    avoiding unnecessary work caused by broken or malicious clients. Fatal
+    errors will always trigger exceptions, even in non-strict mode.
+
+    **Limits**: The various limits are meant as safeguards and exceeding any
+    of those limit will trigger :exc:`ParserLimitReached` exceptions.
+
+    Parser instances can be used as context managers in a ``with`` statement
+    to ensure that :meth:`close` is called after leaving the parser loop. This
+    is important to detect incomplete multipart streams.
+    """
+
     def __init__(
         self,
-        boundary: Union[str, bytes],
+        boundary: Union[str, t_ByteString],
         content_length=-1,
         max_header_size=4096 + 128,  # 4KB should be enough for everyone
         max_header_count=8,  # RFC 7578 allows just 3
@@ -306,15 +345,7 @@ class PushMultipartParser:
         header_charset="utf8",
         strict=False,
     ):
-        """A push-based (incremental, non-blocking) parser for multipart/form-data.
-
-        In `strict` mode, the parser will be less forgiving and bail out more
-        quickly when presented with strange or invalid input, avoiding
-        unnecessary work caused by broken or malicious clients. Fatal errors
-        will always trigger exceptions, even in non-strict mode.
-
-        The various limits are meant as safeguards and exceeding any of those
-        limit will trigger a :exc:`ParserLimitReached` exception.
+        """Create a new parser instance.
 
         :param boundary: The multipart boundary as found in the Content-Type header.
         :param content_length: Expected input size in bytes, or -1 if unknown.
@@ -334,17 +365,16 @@ class PushMultipartParser:
         self.max_segment_count = max_segment_count
         self.strict = strict
 
-        self._delimiter = b"\r\n--" + self.boundary
-
         # Internal parser state
+        self._delimiter = b"\r\n--" + self.boundary
         self._parsed = 0
         self._fieldcount = 0
         self._buffer = bytearray()
         self._current = MultipartSegment(self)
         self._state = _PREAMBLE
 
-        #: True if the parser reached the end of the multipart stream, stopped
-        #: parsing due to an :attr:`error`, or :meth:`<close>` was called.
+        #: True if the parser was closed, either successfully by reaching the
+        #: end of the multipart stream, or due to an :attr:`error`.
         self.closed = False
         #: A :exc:`MultipartError` instance if parsing failed.
         self.error: Optional[MultipartError] = None
@@ -353,28 +383,40 @@ class PushMultipartParser:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """ Close the parser. If the call was caused by an exception, the final
+        check for a complete multipart stream is skipped to avoid another
+        exception.
+        """
         self.close(check_complete=not exc_type)
 
-    def parse(
-        self, chunk: Union[bytes, bytearray]
-    ) -> Iterator[Union["MultipartSegment", bytearray, None]]:
-        """Parse a chunk of data and yield as many result objects as possible
-        with the data given.
+    def parse(self, chunk: t_ByteString) -> Generator[t_ParserEvent, None, None]:
+        """Parse a chunk of data and yield as many parser events as possible
+        from the given chunk.
 
-        For each multipart segment, the parser will emit a single instance
-        of :class:`MultipartSegment` with all headers already present, followed
-        by zero or more non-empty `bytearray` instances containing parts of the
-        segment body, followed by a single `None` signaling the end of the
-        current segment.
+        **Parser Events:** For each multipart segment the parser will emit a
+        single instance of :class:`MultipartSegment` with header and meta
+        information, followed by zero or more non-empty :class:`bytearray`
+        instances with chunks from the segment body, followed by a single
+        :data:`None` event to signal the end of the current segment.
 
-        The returned iterator will stop if more data is required or if the end
-        of the multipart stream was detected. The iterator must be fully consumed
-        before parsing the next chunk. End of input can be signaled by parsing
-        an empty chunk or closing the parser. This is important to verify the
-        multipart message was parsed completely and the last segment is actually
-        complete.
+        This method does not perform any IO on its own. It stops yielding events
+        if more data is needed and should be called again with the next chunk to
+        continue. The returned generator must be fully consumed before parsing
+        the next chunk. Once the end of the multipart stream is reached and the
+        last event was emitted, :attr:`closed` will be true.
 
-        Format errors or exceeded limits will trigger :exc:`MultipartError`.
+        End of input can be signaled by parsing an empty chunk, calling
+        :meth:`close` or using the parser as a context manager and leaving the
+        context. Closing the parser is important to be notified about incomplete
+        or missing segments.
+
+        :param chunk: A non-empty chunk of data, or an empty chunk to signal end
+            of input.
+
+        :raises ParserError: Input is not a valid multipart stream.
+        :raises StrictParserError: Unusual input while parsing in strict mode.
+        :raises ParserLimitReached: One of the configured limits reached.
+        :raises ParserStateError: Invalid parser state (e.g. use after close).
         """
 
         try:
@@ -519,6 +561,80 @@ class PushMultipartParser:
             self.close(check_complete=False)
             raise
 
+    async def parse_async(
+        self, read: t_AsyncReader, chunk_size=1024 * 64
+    ) -> AsyncGenerator[t_ParserEvent, None]:
+        """Parse the entire multipart stream from an async ``read`` function and
+        return an async generator yielding parser events (see :meth:`parse`).
+        Should be used with ``async from``.
+
+        This convenience method will try to read and parse chunks of data until
+        the end of the multipart stream is reached or the ``read`` function
+        returns an empty chunk (signaling EOF). If :attr:`content_length` is
+        known, then the parser will only try to read up to this limit.
+
+        :param read: An async function that takes `chunk_size` as a parameter
+          and returns a non-empty chunk of data as soon as data is available, or
+          an empty chunk if EOF was detected and there is no data to return.
+          For example: :meth:`asyncio.StreamReader.read`.
+        :param chunk_size: A positive integer limiting maximum size of a single
+          read operation.
+
+        :raises Exception: Exceptions raised by ``read`` are not handled.
+        :raises MultipartError: Same as :meth:`parse`.
+
+        .. versionadded:: 1.3
+        """
+        assert chunk_size > 0
+
+        with self:
+            readlimit = self.content_length
+            while not self.closed:
+                if readlimit >= 0:
+                    chunk = await read(min(chunk_size, readlimit))
+                    readlimit -= len(chunk)
+                else:
+                    chunk = await read(chunk_size)
+
+                for event in self.parse(chunk):
+                    yield event
+
+    def parse_blocking(
+        self, read: t_BlockingReader, chunk_size=1024 * 64
+    ) -> Generator[t_ParserEvent, None, None]:
+        """Parse the entire multipart stream from a blocking ``read`` function
+        and return a generator yielding parser events (see :meth:`parse`).
+
+        This convenience method will try to read and parse chunks of data until
+        the end of the multipart stream is reached or the ``read`` function
+        returns an empty chunk (signaling EOF). If :attr:`content_length` is
+        known, then the parser will only try to read up to this limit.
+
+        :param read: A callable that takes `chunk_size` as a parameter
+        and returns a non-empty chunk of data as soon as data is available, or an
+        empty chunk if EOF was detected and there is no data to return. Most
+        blocking read functions work that way.
+        :param chunk_size: A positive integer limiting the maximum chunk size.
+
+        :raises Exception: Exceptions raised by ``read`` are not handled.
+        :raises MultipartError: Same as :meth:`parse`.
+
+        .. versionadded:: 1.3
+        """
+
+        assert chunk_size > 0
+
+        with self:
+            readlimit = self.content_length
+            while not self.closed:
+                if readlimit >= 0:
+                    chunk = read(min(chunk_size, readlimit))
+                    readlimit -= len(chunk)
+                else:
+                    chunk = read(chunk_size)
+
+                yield from self.parse(chunk)
+
     def close(self, check_complete=True):
         """
         Close this parser if not already closed.
@@ -584,7 +700,7 @@ class MultipartSegment:
         self._clen = -1
         self._size_limit = parser.max_segment_size
 
-    def _add_headerline(self, line: Union[bytes, bytearray]):
+    def _add_headerline(self, line: t_ByteString):
         assert line and self.name is None
         parser = self._parser
 
@@ -692,7 +808,7 @@ class MultipartParser:
         memfile_limit=0,
     ):
         """A parser that reads from a `multipart/form-data` encoded byte stream
-        and yields :class:`MultipartPart` instances.
+        and yields buffered :class:`MultipartPart` instances.
 
         The parse acts as a lazy iterator and will only read and parse as much
         data as needed to return the next part. Results are cached and the same
@@ -766,10 +882,8 @@ class MultipartParser:
         return [p for p in self if p.name == name]
 
     def _iterparse(self):
-        read = self.stream.read
         bufsize = self.buffer_size
         mem_used = disk_used = 0
-        readlimit = self.content_length
 
         part = None
         parser = PushMultipartParser(
@@ -783,39 +897,31 @@ class MultipartParser:
         )
 
         with parser:
-            while not parser.closed:
-
-                if readlimit >= 0:
-                    chunk = read(min(bufsize, readlimit))
-                    readlimit -= len(chunk)
+            for event in parser.parse_blocking(self.stream.read, bufsize):
+                if isinstance(event, MultipartSegment):
+                    part = MultipartPart(
+                        event,
+                        buffer_size=self.buffer_size,
+                        memfile_limit=self.spool_limit,
+                        charset=self.charset,
+                    )
+                elif event:
+                    assert part
+                    part._write(event)
+                    if part.is_buffered():
+                        if part.size + mem_used > self.memory_limit:
+                            raise ParserLimitReached("Memory limit reached")
+                    elif part.size + disk_used > self.disk_limit:
+                        raise ParserLimitReached("Disk limit reached")
                 else:
-                    chunk = read(bufsize)
-
-                for event in parser.parse(chunk):
-                    if isinstance(event, MultipartSegment):
-                        part = MultipartPart(
-                            event,
-                            buffer_size=self.buffer_size,
-                            memfile_limit=self.spool_limit,
-                            charset=self.charset,
-                        )
-                    elif event:
-                        assert part
-                        part._write(event)
-                        if part.is_buffered():
-                            if part.size + mem_used > self.memory_limit:
-                                raise ParserLimitReached("Memory limit reached")
-                        elif part.size + disk_used > self.disk_limit:
-                            raise ParserLimitReached("Disk limit reached")
+                    assert part
+                    if part.is_buffered():
+                        mem_used += part.size
                     else:
-                        assert part
-                        if part.is_buffered():
-                            mem_used += part.size
-                        else:
-                            disk_used += part.size
-                        part._mark_complete()
-                        yield part
-                        part = None
+                        disk_used += part.size
+                    part._mark_complete()
+                    yield part
+                    part = None
 
 
 class MultipartPart:

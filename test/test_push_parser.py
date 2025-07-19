@@ -4,8 +4,11 @@
 Tests for the PushMultipartParser all other parsers are based on.
 """
 
+import asyncio
+from collections import deque
 from contextlib import contextmanager
 import unittest
+
 from base64 import b64decode
 import multipart
 
@@ -19,6 +22,7 @@ def assertStrict(text):
         return wrapper
 
     return decorator
+
 
 class PushTestBase(unittest.TestCase):
 
@@ -476,15 +480,114 @@ class TestPushParser(PushTestBase):
         self.assertIs(self.parser.error, first_error)
 
 
+class TestPushParserBlocking(PushTestBase):
+
+    @contextmanager
+    def assertMultipartError(self, message: str = None):
+        with self.assertRaises(multipart.MultipartError) as ex:
+            yield
+        if message:
+            self.assertIn(message, str(ex.exception))
+
+    @classmethod
+    def make_readfunc(cls, chunks):
+        chunks = deque(chunks)
+
+        def readfunc(n):
+            if n is None or n < 0:
+                chunk = b"".join(chunks)
+                chunks.clear()
+                return chunk
+
+            if not chunks:
+                return b""
+
+            chunk = chunks.popleft()
+            if len(chunk) > n:
+                chunk, more = chunk[:n], chunk[n:]
+                chunks.appendleft(more)
+            return chunk
+
+        return readfunc
+
+    def parses_full(self, *chunks, **args):
+        readfunc = self.make_readfunc(chunks)
+        self.events = list(self.parser.parse_blocking(readfunc, **args))
+        return self.events
+
+    def test_bad_chunk_size(self):
+        with self.assertRaises(AssertionError):
+            self.parses_full(chunk_size=0)
+        with self.assertRaises(AssertionError):
+            self.parses_full(chunk_size=-1)
+        with self.assertRaises(TypeError):
+            self.parses_full(chunk_size=None)
+
+    def test_content_length(self):
+        data = b"foobar" * 10
+        chunks = [
+            b"--boundary\r\n",
+            b"Content-Disposition: form-data; name=foo\r\n",
+            b"\r\n",
+            data,
+            b"\r\n--boundary--",
+        ]
+        clen = sum(map(len, chunks))
+
+        def assertSegments():
+            segment, body = self.get_segment("foo")
+            self.assertEqual("foo", segment.name)
+            self.assertEqual(body, data)
+
+        # Correct content length
+        self.reset(content_length=clen)
+        self.parses_full(*chunks)
+        assertSegments()
+
+        # Content length smaller than actual content
+        with self.assertMultipartError("Unexpected end of multipart stream"):
+            self.reset(content_length=clen - 1)
+            self.parses_full(*chunks)
+
+        # Content length larger than actual content
+        with self.assertMultipartError("Unexpected end of multipart stream"):
+            self.reset(content_length=clen)
+            self.parses_full(*chunks[:-1])
+
+        # Content length larger than multipart stream.
+        # Currently not an error because we only care about if we can parse the
+        # multipart stream completely.
+        self.reset(content_length=clen + 4)
+        self.parses_full(*chunks)
+        assertSegments()
+
+        # No content length header
+        self.reset()
+        self.parses_full(*chunks)
+        assertSegments()
 
 
+class TestPushParserAsync(TestPushParserBlocking):
+    def parses_full(self, *chunks, **args):
+        readfunc = self.make_readfunc(chunks)
+
+        async def async_readfunc(n):
+            await asyncio.sleep(0)
+            return readfunc(n)
+
+        async def parse():
+            events = []
+            async for event in self.parser.parse_async(async_readfunc, **args):
+                events.append(event)
+            return events
+
+        self.events = list(asyncio.run(parse()))
+        return self.events
 
 
-
-
-''' The files used by the following test were taken from the werkzeug library
+""" The files used by the following test were taken from the werkzeug library
     test suite and are therefore partly copyrighted by the Werkzeug Team
-    under BSD licence. See https://werkzeug.palletsprojects.com/ '''
+    under BSD licence. See https://werkzeug.palletsprojects.com/ """
 
 browser_test_cases = {}
 browser_test_cases['firefox3-2png1txt'] = {'data': b64decode(b'''

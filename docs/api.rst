@@ -6,18 +6,20 @@ API Reference
 
 .. automodule:: multipart
 
-SansIO Parser
-=============
+Non-Blocking Parser
+===================
 
 .. autoclass:: PushMultipartParser
     :members:
+    :special-members: __enter__, __exit__
 
 .. autoclass:: MultipartSegment
     :members:
     :special-members: __getitem__
 
-Stream Parser
-=============
+
+Buffered Parser
+===============
 
 
 .. autoclass:: MultipartParser
@@ -28,17 +30,16 @@ Stream Parser
 .. autoclass:: MultipartPart
     :members:
 
+
 WSGI Helper
 ===========
 
 .. autofunction:: is_form_request
 .. autofunction:: parse_form_data
 
-.. autoclass:: MultiDict
-    :members:
 
-Header utils
-============
+Header parsing
+==============
 
 .. autofunction:: parse_options_header
 .. autofunction:: header_quote
@@ -47,16 +48,28 @@ Header utils
 .. autofunction:: content_disposition_unquote
 
 
+Utilities
+=========
+
+.. autoclass:: MultiDict
+    :members:
+
+
 Exceptions
 ==========
 
 
 .. autoexception:: MultipartError
+    :exclude-members: __init__, __new__
 
 .. autoexception:: ParserError
+    :exclude-members: __init__, __new__
 
 .. autoexception:: StrictParserError
+    :exclude-members: __init__, __new__
 
 .. autoexception:: ParserLimitReached
+    :exclude-members: __init__, __new__
 
 .. autoexception:: ParserStateError
+    :exclude-members: __init__, __new__

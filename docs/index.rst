@@ -26,23 +26,24 @@ Python multipart/form-data parser
 .. _ASGI: https://asgi.readthedocs.io/en/latest/
 .. _SansIO: https://sans-io.readthedocs.io/
 .. _asyncio: https://docs.python.org/3/library/asyncio.html
+.. _twisted: https://twisted.org/
 
 This module provides a fast incremental non-blocking parser for
 ``multipart/form-data`` [HTML5_, RFC7578_], as well as blocking alternatives for
 easier use in WSGI_ or CGI applications:
 
-* :ref:`push-example`: Fast SansIO_ (incremental, non-blocking) parser suitable
-  for ASGI_, asyncio_ and other IO, time or memory constrained environments.
-* :ref:`stream-example`: Blocking parser that reads from a stream and yields
-  memory- or disk-buffered :class:`MultipartPart` instances.
-* :ref:`wsgi-example`: High-level functions and containers for WSGI_ or CGI
-  applications with support for both `multipart` and `urlencoded` form submissions.
+* :ref:`push-example`: Fast incremental and non-blocking parser suitable for
+  ASGI_, asyncio_, twisted_ and other IO, time or memory constrained environments.
+* :ref:`stream-example`: Blocking stream parser that reads from any stream and
+  yields memory- or disk-buffered :class:`MultipartPart` instances.
+* :ref:`wsgi-example`: High-level parser functions for WSGI_ or CGI applications
+  with support for both `multipart` and `urlencoded` form submissions.
 
 Features and Scope
 ==================
 
 * Pure python single file module with no dependencies.
-* Optimized for both blocking and non-blocking applications.
+* Highly optimized parsers for blocking and non-blocking applications.
 * 100% test coverage with test data from actual browsers and HTTP clients.
 * High throughput and low latency (see `benchmarks <https://github.com/defnull/multipart_bench>`_).
 * Predictable memory and disk resource consumption via fine grained limits.
@@ -62,7 +63,7 @@ required workarounds do not impact performance or security. In detail this means
 Installation
 ============
 
-``pip install multipart``
+``pip install multipart`` or ``uv add multipart``
 
 Table of Content
 ================
