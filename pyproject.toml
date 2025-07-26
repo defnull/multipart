@@ -44,6 +44,8 @@ dev = [
     "pytest-cov",
     "build",
     "twine",
+    "tox",
+    "tox-uv",
 ]
 docs = [
     "sphinx>=8,<9",
@@ -62,4 +64,18 @@ include = [
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = [ "test" ]
+
+[tool.tox]
+requires = ["tox>=4.19", "tox-uv>=1.26.2"]
+env_list = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14.0rc1", "type"]
+
+[tool.tox.env_run_base]
+description = "Run test under {env_name} ({env_python})"
+deps = ["pytest"]
+commands = [["pytest"]]
+
+[tool.tox.env.type]
+description = "Run type check on code base"
+deps = ["mypy>=1.11.2", "types-cachetools>=5.5.0.20240820", "types-chardet>=5.0.4.6"]
+commands = [["mypy", "multipart.py"]]
 
