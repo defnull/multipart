@@ -13,14 +13,16 @@ and may break applications that rely on *incorrect* or *undefined* behavior or
 Release 1.3
 ===========
 
-**Not released yet**
+This release adds new APIs and contains internal or non-breaking api changes.
 
 * feat: New convenience methods :meth:`PushMultipartParser.parse_blocking` and
   :meth:`PushMultipartParser.parse_async`.
 * feat: Nicer error messages when reading from a closed ``MultipartPart``.
+* feat: Improved typing.
 * change: ``segment`` is now a required constructor argument for ``MultipartPart``
   and changed position. The constructor is not part of the public API, so this
   should not break user code.
+* fix/change: Closing a MultipartPart should set its ``file`` to ``None``, not ``False``.
 
 Release 1.2
 ===========
