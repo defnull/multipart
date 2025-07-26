@@ -681,9 +681,12 @@ class PushMultipartParser:
             raise ParserError("Segment header failed to decode", err)
 
         if name == "Content-Length":
-            if not value.isdecimal():
+            try:
+                content_length = int(value)
+                if content_length < 0 or str(content_length) != value:
+                    raise ValueError("Not an unsigned ASCII decimal")
+            except ValueError:
                 raise ParserError("Invalid segment Content-Length header value")
-            content_length = int(value)
             if content_length > self.max_segment_size:
                 raise ParserLimitReached(
                     "Segment Content-Length larger than maximum segment size"
