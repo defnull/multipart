@@ -1,18 +1,23 @@
-MANIFEST
+# IDEs
+.vscode
+
+# Test and development artifacts
 __pycache__/
 *.pyc
-/build/
-/dist/
-/*.egg-info
-venv/
+dev-*
 .venv/
-
-# tests
-test.run
-html/
-/.cache/
-/.pytest_cache/
-
-# coverage
+.cache/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 /htmlcov
+
+# Build artifacts
+*.egg-info
+MANIFEST
+build/
+dist/
+
+
