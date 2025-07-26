@@ -12,7 +12,7 @@ License: MIT (see LICENSE file)
 
 
 __author__ = "Marcel Hellkamp"
-__version__ = '1.4.0-dev'
+__version__ = "1.4.0-dev"
 __license__ = "MIT"
 __all__ = [
     "MultipartError",
@@ -392,7 +392,7 @@ class PushMultipartParser:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """ Close the parser. If the call was caused by an exception, the final
+        """Close the parser. If the call was caused by an exception, the final
         check for a complete multipart stream is skipped to avoid another
         exception.
         """
