@@ -7,17 +7,27 @@ Tests for the PushMultipartParser all other parsers are based on.
 import asyncio
 from collections import deque
 from contextlib import contextmanager
+import functools
 import unittest
 
 from base64 import b64decode
 import multipart
 
-def assertStrict(text):
+
+def assertRaiseStrict(text):
+    """Runs a test case twice, passing a strict parameter as true or false
+    and assumes that the strict test raises an exception."""
+
     def decorator(func):
-        def wrapper(self):
-            func(self, strict=False)
-            with self.assertRaisesRegex(multipart.MultipartError, text):
-                func(self, strict=True)
+        @functools.wraps(func)
+        def wrapper(self: PushTestBase):
+            with self.subTest(strict=False):
+                self.reset(strict=False)
+                func(self, strict=False)
+            with self.subTest(strict=True):
+                self.reset(strict=True)
+                with self.assertRaisesRegex(multipart.StrictParserError, text):
+                    func(self, strict=True)
 
         return wrapper
 
@@ -35,8 +45,7 @@ class PushTestBase(unittest.TestCase):
     def assertParseError(self, errortext, klass=multipart.MultipartError):
         with self.assertRaises(klass) as r:
             yield
-        fullmsg = " ".join(map(str, r.exception.args))
-        self.assertTrue(errortext in fullmsg, f"{errortext!r} not in {fullmsg!r}")
+        self.assertIn(errortext, repr(r.exception))
 
     def reset(self, **ka):
         ka.setdefault("boundary", "boundary")
@@ -60,36 +69,47 @@ class PushTestBase(unittest.TestCase):
             elif event:
                 data.append(event)
             else:
-                yield current, b''.join(data)
+                yield current, b"".join(data)
                 current = None
                 data = []
-        if current:
-            yield current, b''.join(data)
+        self.assertIsNone(current, "Last segment incomplete")
 
     def get_segment(self, index_or_name):
         allnames = []
         for i, (segment, body) in enumerate(self.compact_events()):
             allnames.append(segment.name)
             if index_or_name == i or index_or_name == segment.name:
+                self.assertTrue(segment.complete)
                 return segment, body
         self.fail(f"Segment {index_or_name!r} not found in {allnames!r}")
+
+    def assertTextSegment(self, name, text, encoding="utf-8"):
+        segment, body = self.get_segment(name)
+        self.assertIsNone(segment.filename)
+        self.assertEqual(text, body.decode(segment.charset or encoding))
+        self.assertIsNone(segment.content_type)
+        return segment
+
+    def assertFileSegment(self, name, filename, data):
+        segment, body = self.get_segment(name)
+        self.assertEqual(filename, segment.filename)
+        self.assertEqual(data, body)
+        return segment
 
 
 class TestPushParser(PushTestBase):
 
-    def test_data_after_terminator(self):
+    @assertRaiseStrict("Unexpected data after end of multipart stream")
+    def test_data_after_terminator(self, strict):
         self.parse(b"--boundary--")
-        self.parse(b"junk")  # Fine
-
-        self.reset(strict=True)
-        self.parse(b"--boundary--")
-        with self.assertRaises(multipart.MultipartError):
-            self.parse(b"junk")
+        self.parse(b"junk")
 
     def test_eof_before_clen(self):
         self.reset(content_length=100)
         self.parse(b"--boundary")
-        with self.assertParseError("Unexpected end of multipart stream (parser closed)"):
+        with self.assertParseError(
+            "Unexpected end of multipart stream (parser closed)"
+        ):
             self.parse(b"")
 
     def test_data_after_eof(self):
@@ -122,7 +142,7 @@ class TestPushParser(PushTestBase):
         with self.assertParseError("Unexpected byte in front of first boundary"):
             self.parse(b"junk--boundary--")
 
-    @assertStrict("Unexpected data after end of multipart stream")
+    @assertRaiseStrict("Unexpected data after end of multipart stream")
     def test_junk_after(self, strict):
         self.reset(strict=strict)
         self.parse(b"--boundary--")
@@ -138,7 +158,9 @@ class TestPushParser(PushTestBase):
             self.parse(b"--boundary--")
 
         self.reset()
-        with self.assertParseError("Unexpected end of multipart stream (parser closed)"):
+        with self.assertParseError(
+            "Unexpected end of multipart stream (parser closed)"
+        ):
             with self.parser:
                 self.parse(b"--boundary")
 
@@ -171,7 +193,7 @@ class TestPushParser(PushTestBase):
         with self.assertParseError("Maximum segment header count exceeded"):
             self.parse(b"Header: value\r\n")
 
-    @assertStrict("Unexpected segment header continuation")
+    @assertRaiseStrict("Unexpected segment header continuation")
     def test_header_continuation(self, strict):
         self.reset(strict=strict)
         self.parse(b"--boundary\r\n")
@@ -208,20 +230,33 @@ class TestPushParser(PushTestBase):
             self.reset()
             with self.assertParseError("Invalid segment header name"):
                 self.parse(
-                    b"--boundary\r\ninvalid%sname:value\r\n\r\ndata\r\n--boundary--"
-                    % badchar
+                    b"--boundary\r\n",
+                    "invalid%sname:value\r\n" % badchar,
+                    "\r\n",
+                    "data",
+                    "\r\n--boundary--",
                 )
 
     def test_header_bad_unicode(self):
         with self.assertParseError("Segment header failed to decode"):
             self.parse(
-                b"--boundary\r\ninvalid\xc3\x28:value\r\n\r\ndata\r\n--boundary--"
+                b"--boundary\r\n",
+                b"X-SomeHeader:bad\xc3\x28value\r\n",
+                "\r\n",
+                "data",
+                "\r\n--boundary--",
             )
 
     def test_header_wrong_segment_subtype(self):
-        with self.assertParseError("Invalid Content-Disposition segment header: Wrong type"):
+        with self.assertParseError(
+            "Invalid Content-Disposition segment header: Wrong type"
+        ):
             self.parse(
-                b"--boundary\r\nContent-Disposition: mixed\r\n\r\ndata\r\n--boundary--"
+                b"--boundary\r\n",
+                "Content-Disposition: mixed\r\n",
+                "\r\n",
+                "data",
+                "\r\n--boundary--",
             )
 
     def test_segment_empty_name(self):
@@ -235,7 +270,9 @@ class TestPushParser(PushTestBase):
         parts = self.parse(b'Content-Disposition: form-data; name=""\r\n\r\n')
         self.assertEqual(parts[0].name, "")
 
-    @assertStrict("Invalid Content-Disposition segment header: Missing name option")
+    @assertRaiseStrict(
+        "Invalid Content-Disposition segment header: Missing name option"
+    )
     def test_segment_missing_name(self, strict):
         self.reset(strict=strict)
         self.parse(b"--boundary\r\n")
@@ -326,11 +363,13 @@ class TestPushParser(PushTestBase):
             self.parse("\r\n--boundary--")
 
     def test_segment_clen_limit(self):
-        self.reset(max_segment_size = 1024)
+        self.reset(max_segment_size=1024)
         self.parse("--boundary\r\n")
         self.parse("Content-Disposition: form-data; name=foo\r\n")
         with self.assertParseError(
-            "Segment Content-Length larger than maximum segment size", multipart.ParserLimitReached):
+            "Segment Content-Length larger than maximum segment size",
+            multipart.ParserLimitReached,
+        ):
             self.parse(f"Content-Length: 1025\r\n")
             self.parse("\r\n")
             self.parse("x" * 1024)
@@ -356,197 +395,294 @@ class TestPushParser(PushTestBase):
 
     def test_part_ends_after_header(self):
         with self.assertRaises(multipart.MultipartError), self.parser:
-            self.parse('--boundary\r\n', 'Header: value\r\n', '\r\n--boundary--')
+            self.parse("--boundary\r\n", "Header: value\r\n", "\r\n--boundary--")
 
     def test_part_ends_in_header(self):
         with self.assertRaises(multipart.MultipartError), self.parser:
-            self.parse('--boundary\r\n', 'Header: value', '\r\n--boundary--')
+            self.parse("--boundary\r\n", "Header: value", "\r\n--boundary--")
 
     def test_no_terminator(self):
         with self.assertRaises(multipart.MultipartError), self.parser:
-            self.parse('--boundary\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc')
+            self.parse(
+                "--boundary\r\n",
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc",
+            )
 
     def test_no_newline_after_content(self):
         with self.assertRaises(multipart.MultipartError), self.parser:
-            self.parse('--boundary\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc', '--boundary--')
+            self.parse(
+                "--boundary\r\n",
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc",
+                "--boundary--",
+            )
 
     def test_no_newline_after_middle_content(self):
         with self.parser:
             self.parse(
-                '--boundary\r\n',
-                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                    'Content-Type: image/png\r\n', '\r\n', 'abc', '--boundary\r\n'
-                    'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
-                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
+                "--boundary\r\n",
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc",
+                "--boundary\r\n"
+                'Content-Disposition: form-data; name="file2"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc\r\n",
+                "--boundary--",
+            )
         segment, body = self.get_segment("file1")
         self.assertTrue(body.startswith(b"abc--boundary\r\n"))
         self.assertTrue(body.endswith(b"abc"))
 
-    @assertStrict("Boundary not found in first chunk")
+    @assertRaiseStrict("Boundary not found in first chunk")
     def test_ignore_junk_before_start_boundary(self, strict):
         self.reset(strict=strict)
-        self.parse('Lots of junk lots of junk', '\r\n--boundary\r\n'
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
+        self.parse(
+            "Lots of junk lots of junk",
+            "\r\n--boundary\r\n"
+            'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+            "Content-Type: image/png\r\n",
+            "\r\n",
+            "abc\r\n",
+            "--boundary--",
+        )
         self.parser.close()
 
     def test_reject_boundary_in_preamble(self):
-        """ The RFC defines that a boundary must not appear in segment bodies,
-            but technically it is still allowed to appear in the preamble as
-            long as it does not qualify as a full start delimiter (position zero,
-            or separated from the preamble by CRLF). This is absurd, preambles
-            are useless to begin with and the boundary appearing in the preamble
-            is never intentional. Instead of silently skipping it (and the first
-            segment), we assume a broken client and fail fast, even in
-            non-strict mode. A clear error is better as silently loosing data.
-         """
+        """The RFC defines that a boundary must not appear in segment bodies,
+        but technically it is still allowed to appear in the preamble as
+        long as it does not qualify as a full start delimiter (position zero,
+        or separated from the preamble by CRLF). This is absurd, preambles
+        are useless to begin with and the boundary appearing in the preamble
+        is never intentional. Instead of silently skipping it (and the first
+        segment), we assume a broken client and fail fast, even in
+        non-strict mode. A clear error is better as silently loosing data.
+        """
         with self.assertParseError("Unexpected byte in front of first boundary"):
             self.parse(
-                'Preamble\n', '--boundary\r\n'
+                "Preamble\n",
+                "--boundary\r\n"
                 'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc\r\n",
+                "--boundary--",
+            )
 
         self.reset()
         with self.assertParseError("Unexpected byte in front of first boundary"):
-            self.parse('\n--boundary--')
+            self.parse("\n--boundary--")
 
         self.reset()
         with self.assertParseError("Unexpected byte after first boundary"):
             self.parse(
-                '--boundaryy\r\n''--boundary\r\n'
+                "--boundaryy\r\n"
+                "--boundary\r\n"
                 'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--')
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc\r\n",
+                "--boundary--",
+            )
 
     def test_accept_crln_before_start_boundary(self):
-        """ While uncommon, a single \\r\\n before and after the first and last
-            boundary should be accepted even in strict mode. """
+        """While uncommon, a single \\r\\n before and after the first and last
+        boundary should be accepted even in strict mode."""
         self.reset(strict=True)
-        self.parse('\r\n--boundary\r\n'
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n')
+        self.parse(
+            "\r\n--boundary\r\n"
+            'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+            "Content-Type: image/png\r\n",
+            "\r\n",
+            "abc\r\n",
+            "--boundary--\r\n",
+        )
 
     def test_allow_junk_after_end_boundary(self):
-        self.parse('--boundary--\r\njunk')
+        self.parse("--boundary--\r\njunk")
         self.reset()
-        self.parse('--boundary\r\n'
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n', 'junk') 
+        self.parse(
+            "--boundary\r\n"
+            'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+            "Content-Type: image/png\r\n",
+            "\r\n",
+            "abc\r\n",
+            "--boundary--\r\n",
+            "junk",
+        )
 
     def test_partial_start_boundary(self):
-        self.parse('--boun', 'dary\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n', 'junk')
+        self.parse(
+            "--boun",
+            "dary\r\n",
+            'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+            "Content-Type: image/png\r\n",
+            "\r\n",
+            "abc\r\n",
+            "--boundary--\r\n",
+            "junk",
+        )
 
     def test_tiny_chunks(self):
-        payload = list(''.join(['--boundary\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--boundary--\r\n']))
-        for char in payload:
+        payload = [
+            "--boundary\r\n",
+            'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+            "Content-Type: image/png\r\n",
+            "\r\n",
+            "abc\r\n",
+            "--boundary--\r\n",
+        ]
+
+        for char in "".join(payload):
             self.parse(char)
         self.assertEqual(self.get_segment("file1")[1], b"abc")
 
     def test_no_boundary(self):
-        with self.assertParseError("Unexpected end of multipart stream (parser closed)"):
-            self.parse('Not a multipart message')
+        with self.assertParseError(
+            "Unexpected end of multipart stream (parser closed)"
+        ):
+            self.parse("Not a multipart message")
             self.parser.close()
 
         # Strict mode should fail quicker
         self.reset(strict=True)
         with self.assertParseError("Boundary not found in first chunk"):
-            self.parse('Not a multipart message')
+            self.parse("Not a multipart message")
 
     def test_no_start_boundary(self):
         with self.assertRaises(multipart.MultipartError), self.parser:
-            self.parse('--bar\r\n','--nonsense\r\n'
-                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                    'Content-Type: image/png\r\n', '\r\n', 'abc\r\n', '--nonsense--')
+            self.parse(
+                "--bar\r\n",
+                "--nonsense\r\n"
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc",
+                "\r\n--nonsense--",
+            )
 
     def test_no_end_boundary(self):
         with self.assertRaises(multipart.MultipartError):
-            self.parse('--boundary\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc\r\n')
+            self.parse(
+                "--boundary\r\n",
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc\r\n",
+            )
             self.parser.close()
 
     def test_empty_part(self):
-        self.parse('--boundary\r\n', '--boundary--')
+        self.parse("--boundary\r\n", "--boundary--")
         with self.assertRaises(multipart.MultipartError):
             self.parser.close()
 
     def test_invalid_header(self):
         with self.assertRaises(multipart.MultipartError):
-            self.parse('--boundary\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n',
-                   'Bad header\r\n', '\r\n', 'abc'*1024, '\r\n--boundary--')
+            self.parse(
+                "--boundary\r\n",
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "Bad header\r\n",
+                "\r\n",
+                "abc" * 1024,
+                "\r\n--boundary--",
+            )
 
     def test_invalid_header_name(self):
         with self.assertRaises(multipart.MultipartError):
-            self.parse('--boundary\r\n',
-                   'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
-                   'Content-Type: image/png\r\n',
-                   'Bad header: value\r\n', '\r\n', 'abc'*1024, '\r\n--boundary--')
+            self.parse(
+                "--boundary\r\n",
+                'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+                "Content-Type: image/png\r\n",
+                "Bad header: value\r\n",
+                "\r\n",
+                "abc" * 1024,
+                "\r\n--boundary--",
+            )
 
     def test_no_disposition_header(self):
         with self.assertRaises(multipart.MultipartError):
-            self.parse('--boundary\r\n',
-                   'Content-Type: image/png\r\n', '\r\n', 'abc'*1024+'\r\n', '--boundary--')
+            self.parse(
+                "--boundary\r\n",
+                "Content-Type: image/png\r\n",
+                "\r\n",
+                "abc" * 1024 + "\r\n",
+                "--boundary--",
+            )
 
     def test_error_property(self):
         with self.assertRaises(multipart.MultipartError):
-            self.parse('--boundary\r\njunk\r\n--boundary--')
+            self.parse("--boundary\r\njunk\r\n--boundary--")
         self.assertIsInstance(self.parser.error, multipart.ParserError)
 
     def test_error_twice(self):
         with self.assertRaises(multipart.ParserError):
-            self.parse('--boundary\r\njunk\r\n--boundary--')
+            self.parse("--boundary\r\njunk\r\n--boundary--")
         first_error = self.parser.error
         self.assertIsInstance(first_error, multipart.ParserError)
         # The first error should stick
         with self.assertRaises(multipart.ParserStateError):
-            self.parse('more junk')
+            self.parse("more junk")
         self.assertIs(self.parser.error, first_error)
         with self.assertRaises(multipart.ParserError):
             self.parser.close()
         self.assertIs(self.parser.error, first_error)
 
+    def test_names_from_hell(self):
+        self.reset(strict=True)
+        # The most error prone segment name or filename I could come up with
+        teststring = 'test \\ \\\\ ; ö " = ;'
+        # These are the actual bytes generated by Firefox 131 or Chrome 129, I
+        # just replaced the boundary for an easier read.
+        self.parse(
+            b"--boundary\r\n"
+            b'Content-Disposition: form-data; name="test \\ \\\\ ; \xc3\xb6 %22 = ;"; filename="test \\ \\\\ ; \xc3\xb6 %22 = ;"\r\n'
+            b"Content-Type: application/octet-stream\r\n"
+            b"\r\n"
+            b'test \\ \\\\ ; \xc3\xb6 " = ;'
+            b"\r\n--boundary--\r\n",
+        )
+        self.assertFileSegment(teststring, teststring, teststring.encode("utf8"))
 
-class TestPushParserBlocking(PushTestBase):
 
-    @contextmanager
-    def assertMultipartError(self, message: str = None):
-        with self.assertRaises(multipart.MultipartError) as ex:
-            yield
-        if message:
-            self.assertIn(message, str(ex.exception))
+def make_readfunc(chunks):
+    """Create a function that behaves like ByteIO.read(n), but does not merge
+    the input chunks into a continuous stream. The returned chunks are instead
+    limited by both the n parameter, and the chunk borders within the source
+    data."""
+    chunks = deque(chunks)
 
-    @classmethod
-    def make_readfunc(cls, chunks):
-        chunks = deque(chunks)
-
-        def readfunc(n):
-            if n is None or n < 0:
-                chunk = b"".join(chunks)
-                chunks.clear()
-                return chunk
-
-            if not chunks:
-                return b""
-
-            chunk = chunks.popleft()
-            if len(chunk) > n:
-                chunk, more = chunk[:n], chunk[n:]
-                chunks.appendleft(more)
+    def readfunc(n):
+        if n is None or n < 0:
+            chunk = b"".join(chunks)
+            chunks.clear()
             return chunk
 
-        return readfunc
+        if not chunks:
+            return b""
+
+        chunk = chunks.popleft()
+        if len(chunk) > n:
+            chunk, more = chunk[:n], chunk[n:]
+            chunks.appendleft(more)
+        return chunk
+
+    return readfunc
+
+
+class TestPushParserBlocking(PushTestBase):
+    """Tests specific to the parse_blocking() method."""
 
     def parses_full(self, *chunks, **args):
-        readfunc = self.make_readfunc(chunks)
+        readfunc = make_readfunc(chunks)
         self.events = list(self.parser.parse_blocking(readfunc, **args))
         return self.events
 
@@ -558,53 +694,54 @@ class TestPushParserBlocking(PushTestBase):
         with self.assertRaises(TypeError):
             self.parses_full(chunk_size=None)
 
-    def test_content_length(self):
-        data = b"foobar" * 10
+    def _make_teststream(self, name, text):
         chunks = [
             b"--boundary\r\n",
-            b"Content-Disposition: form-data; name=foo\r\n",
+            f"Content-Disposition: form-data; name={name}\r\n".encode("utf-8"),
             b"\r\n",
-            data,
+            text.encode("utf-8"),
             b"\r\n--boundary--",
         ]
-        clen = sum(map(len, chunks))
+        return chunks, sum(map(len, chunks))
 
-        def assertSegments():
-            segment, body = self.get_segment("foo")
-            self.assertEqual("foo", segment.name)
-            self.assertEqual(body, data)
+    def test_clen_missing(self):
+        chunks, clen = self._make_teststream("foo", "text")
+        self.parses_full(*chunks)
+        self.assertTextSegment("foo", "text")
 
-        # Correct content length
+    def test_clen_correct(self):
+        chunks, clen = self._make_teststream("foo", "text")
         self.reset(content_length=clen)
         self.parses_full(*chunks)
-        assertSegments()
+        self.assertTextSegment("foo", "text")
 
-        # Content length smaller than actual content
-        with self.assertMultipartError("Unexpected end of multipart stream"):
-            self.reset(content_length=clen - 1)
+    def test_clen_smaller_than_content(self):
+        chunks, clen = self._make_teststream("foo", "text")
+        self.reset(content_length=clen - 1)
+        with self.assertParseError("Unexpected end of multipart stream"):
             self.parses_full(*chunks)
 
-        # Content length larger than actual content
-        with self.assertMultipartError("Unexpected end of multipart stream"):
+    def test_clen_larger_than_content(self):
+        chunks, clen = self._make_teststream("foo", "text")
+        with self.assertParseError("Unexpected end of multipart stream"):
             self.reset(content_length=clen)
-            self.parses_full(*chunks[:-1])
+            self.parses_full(*chunks[:-1], chunks[-1][:-1])
 
+    def test_clen_larger_than_stream(self):
         # Content length larger than multipart stream.
         # Currently not an error because we only care about if we can parse the
         # multipart stream completely.
-        self.reset(content_length=clen + 4)
+        chunks, clen = self._make_teststream("foo", "text")
+        self.reset(content_length=clen + 1)
         self.parses_full(*chunks)
-        assertSegments()
-
-        # No content length header
-        self.reset()
-        self.parses_full(*chunks)
-        assertSegments()
+        self.assertTextSegment("foo", "text")
 
 
 class TestPushParserAsync(TestPushParserBlocking):
+    """Tests specific to the parse_async() method."""
+
     def parses_full(self, *chunks, **args):
-        readfunc = self.make_readfunc(chunks)
+        readfunc = make_readfunc(chunks)
 
         async def async_readfunc(n):
             await asyncio.sleep(0)
@@ -620,12 +757,98 @@ class TestPushParserAsync(TestPushParserBlocking):
         return self.events
 
 
-""" The files used by the following test were taken from the werkzeug library
-    test suite and are therefore partly copyrighted by the Werkzeug Team
-    under BSD licence. See https://werkzeug.palletsprojects.com/ """
+legacy_tests = {}
+legacy_tests["firefox3-2png1txt"] = [
+    b"-----------------------------186454651713519341951581030105\r\n",
+    b'Content-Disposition: form-data; name="file1"; filename="anchor.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file1-data]\r\n",
+    b"-----------------------------186454651713519341951581030105\r\n",
+    b'Content-Disposition: form-data; name="file2"; filename="application_edit.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file2-data]\r\n",
+    b"-----------------------------186454651713519341951581030105\r\n",
+    b'Content-Disposition: form-data; name="text"\r\n',
+    b"\r\n",
+    b"[Text]\r\n",
+    b"-----------------------------186454651713519341951581030105--\r\n",
+]
+legacy_tests["firefox3-2pnglongtext"] = [
+    b"-----------------------------14904044739787191031754711748\r\n",
+    b'Content-Disposition: form-data; name="file1"; filename="accept.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file1-data]\r\n",
+    b"-----------------------------14904044739787191031754711748\r\n",
+    b'Content-Disposition: form-data; name="file2"; filename="add.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file2-data]\r\n",
+    b"-----------------------------14904044739787191031754711748\r\n",
+    b'Content-Disposition: form-data; name="text"\r\n',
+    b"\r\n",
+    b"[Text]\r\n",
+    b"-----------------------------14904044739787191031754711748--\r\n",
+]
+legacy_tests["opera8-2png1txt"] = [
+    b"------------zEO9jQKmLc2Cq88c23Dx19\r\n",
+    b'Content-Disposition: form-data; name="file1"; filename="arrow_branch.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file1-data]\r\n",
+    b"------------zEO9jQKmLc2Cq88c23Dx19\r\n",
+    b'Content-Disposition: form-data; name="file2"; filename="award_star_bronze_1.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file2-data]\r\n",
+    b"------------zEO9jQKmLc2Cq88c23Dx19\r\n",
+    b'Content-Disposition: form-data; name="text"\r\n',
+    b"\r\n",
+    b"[Text]\r\n",
+    b"------------zEO9jQKmLc2Cq88c23Dx19--\r\n",
+]
+legacy_tests["webkit3-2png1txt"] = [
+    b"------WebKitFormBoundaryjdSFhcARk8fyGNy6\r\n",
+    b'Content-Disposition: form-data; name="file1"; filename="gtk-apply.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file1-data]\r\n",
+    b"------WebKitFormBoundaryjdSFhcARk8fyGNy6\r\n",
+    b'Content-Disposition: form-data; name="file2"; filename="gtk-no.png"\r\n',
+    b"Content-Type: image/png\r\n",
+    b"\r\n",
+    b"[file2-data]\r\n",
+    b"------WebKitFormBoundaryjdSFhcARk8fyGNy6\r\n",
+    b'Content-Disposition: form-data; name="text"\r\n',
+    b"\r\n",
+    b"[Text]\r\n",
+    b"------WebKitFormBoundaryjdSFhcARk8fyGNy6--\r\n",
+]
+legacy_tests["ie6-2png1txt"] = [
+    b"-----------------------------7d91b03a20128\r\n",
+    b'Content-Disposition: form-data; name="file1"; filename="C:\\Python25\\wztest\\werkzeug-main\\tests\\multipart\\firefox3-2png1txt\\file1.png"\r\n',
+    b"Content-Type: image/x-png\r\n",
+    b"\r\n",
+    b"[file1-data]\r\n",
+    b"-----------------------------7d91b03a20128\r\n",
+    b'Content-Disposition: form-data; name="file2"; filename="C:\\Python25\\wztest\\werkzeug-main\\tests\\multipart\\firefox3-2png1txt\\file2.png"\r\n',
+    b"Content-Type: image/x-png\r\n",
+    b"\r\n",
+    b"[file2-data]\r\n",
+    b"-----------------------------7d91b03a20128\r\n",
+    b'Content-Disposition: form-data; name="text"\r\n',
+    b"\r\n",
+    b"[Text]\r\n",
+    b"-----------------------------7d91b03a20128--\r\n",
+]
+
 
 browser_test_cases = {}
-browser_test_cases['firefox3-2png1txt'] = {'data': b64decode(b'''
+browser_test_cases["firefox3-2png1txt"] = {
+    "data": b64decode(
+        b"""
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xODY0NTQ2NTE3MTM1MTkzNDE5NTE1ODEwMzAx
 MDUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0iZmlsZTEiOyBmaWxlbmFt
 ZT0iYW5jaG9yLnBuZyINCkNvbnRlbnQtVHlwZTogaW1hZ2UvcG5nDQoNColQTkcNChoKAAAADUlI
@@ -656,9 +879,15 @@ j+d4eecaPd1dPxNTSlfWHm1v5y/EzBitblXp4JLZ5f6yBbOwaK5tsD+9c33jq/f8w2+mRSjOllPh
 kAAAAABJRU5ErkJggg0KLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xODY0NTQ2NTE3MTM1
 MTkzNDE5NTE1ODEwMzAxMDUNCkNvbnRlbnQtRGlzcG9zaXRpb246IGZvcm0tZGF0YTsgbmFtZT0i
 dGV4dCINCg0KZXhhbXBsZSB0ZXh0DQotLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLTE4NjQ1
-NDY1MTcxMzUxOTM0MTk1MTU4MTAzMDEwNS0tDQo='''),
-'boundary':'---------------------------186454651713519341951581030105',
-'files': {'file1': (u'anchor.png', 'image/png', b64decode(b'''
+NDY1MTcxMzUxOTM0MTk1MTU4MTAzMDEwNS0tDQo="""
+    ),
+    "boundary": "---------------------------186454651713519341951581030105",
+    "files": {
+        "file1": (
+            "anchor.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAGdSURBVDjLpVMxa8JAFL6rAQUHXQoZpLU/
 oUOnDtKtW/MDBFHHThUKTgrqICgOEtd2EVxb2qFkKTgVChbSCnZTiVBEMBRLiEmafleCDaWxDX3w
@@ -668,8 +897,14 @@ BW7rdDo2I6ZSKeq7B8x0XV/bwJWAJEnHSMwBDUEQWq5GfsJthUJhlVuv11uckyiGgiH2RWK73RYR
 b2cymbG7gnK5vIX9USwWI1yAI/KjLGK7teEI8HN1TizrnZWdRxxsNps8vI3YLpVKbB2EWB6XkMHz
 gAlvriYRSW+app1Mpy/jSCRSRSyDUON5nuJGytaAHI/vVPv9p/FischivL96gEP2bGxorhVFqYXD
 YQFCScwBYa9EKU1OlAkB+QLEU2AGaJ7PWKlUDiF2BBw4P9Mt/KUoije+5uAv9gGcjD6Kg4wu3AAA
-AABJRU5ErkJggg==''')),
-          'file2': (u'application_edit.png', 'image/png', b64decode(b'''
+AABJRU5ErkJggg=="""
+            ),
+        ),
+        "file2": (
+            "application_edit.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJRSURBVBgZpcHda81xHMDx9+d3fudYzuYw
 2RaZ5yTWolEiuZpCSjGJFEktUUr8A6ZxQZGHmDtqdrGUXHgoeZqSp1F2bLFWjtkOB8PZzvmd7+dj
@@ -682,10 +917,16 @@ P56QmL2GXG8zsfFCz8skA1mQXKbaU3X8ISIgQsgDcun7FL7cJjFnLUMfLyLRr0SLS4hbhiup5Szd
 KFu4jvynJiIxIzcwg/SjF1RsOk9R+QJMlZCvqvwhQFdbM4XvrynIVHpfn2ZSWYyhzHS+PUtSueUC
 0cQ0QmpGyE9197TUnwzq1DnUKbXSxOb6S7xtPkjngzbGVVbzvS/FjaGt9DU8xlRRJdTCMDEzRjuy
 Z1FwaFe9j+d4eecaPd1dPxNTSlfWHm1v5y/EzBitblXp4JLZ5f6yBbOwaK5tsD+9c33jq/f8w2+m
-RSjOllPhkAAAAABJRU5ErkJggg=='''))},
-'forms': {'text': u'example text'}}
+RSjOllPhkAAAAABJRU5ErkJggg=="""
+            ),
+        ),
+    },
+    "forms": {"text": "example text"},
+}
 
-browser_test_cases['firefox3-2pnglongtext'] = {'data': b64decode(b'''
+browser_test_cases["firefox3-2pnglongtext"] = {
+    "data": b64decode(
+        b"""
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcxMTc0
 OA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlMSI7IGZpbGVuYW1l
 PSJhY2NlcHQucG5nIg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhE
@@ -721,9 +962,15 @@ TNf0mczcnnQyu/MilaFJCae1nw2fbz1DnVOxyGTlKeZft/Ff8x1BRssfACjTwQAAAABJRU5ErkJg
 gg0KLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcx
 MTc0OA0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJ0ZXh0Ig0KDQotLWxv
 bmcgdGV4dA0KLS13aXRoIGJvdW5kYXJ5DQotLWxvb2thbGlrZXMtLQ0KLS0tLS0tLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcxMTc0OC0tDQo='''),
-'boundary':'---------------------------14904044739787191031754711748',
-'files': {'file1': (u'accept.png', 'image/png', b64decode(b'''
+LS0tLS0tLS0tLS0tLS0xNDkwNDA0NDczOTc4NzE5MTAzMTc1NDcxMTc0OC0tDQo="""
+    ),
+    "boundary": "---------------------------14904044739787191031754711748",
+    "files": {
+        "file1": (
+            "accept.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAKfSURBVDjLpZPrS1NhHMf9O3bOdmwDCWRE
 IYKEUHsVJBI7mg3FvCxL09290jZj2EyLMnJexkgpLbPUanNOberU5taUMnHZUULMvelCtWF0sW/n
@@ -737,8 +984,14 @@ Sss8ySGdR4abQQv6lrui6VxsRonrGCS9VEjSQ9E7CtiqdOZ4UuTqnBHO1X7YXl6Daa4yGq7vWO1D
 UT0hh9p9EnXT5Vh6t4C22QaUDh6HwnECOmcO7K+6kW49DKqS2DrEZCtfuI+9GrNHg4fMHVSO5kE7
 nAPVkAxKBxcOzsajpS4Yh4ohUPPWKTUh3PaQEptIOr6BiJjcZXCwktaAGfrRIpwblqOV3YKdhfXO
 IvBLeREWpnd8ynsaSJoyESFphwTtfjN6X1jRO2+FxWtCWksqBApeiFIR9K6fiTpPiigDoadqCEag
-5YUFKl6Yrciw0VOlhOivv/Ff8wtn0KzlebrUYwAAAABJRU5ErkJggg==''')),
-          'file2': (u'add.png', 'image/png', b64decode(b'''
+5YUFKl6Yrciw0VOlhOivv/Ff8wtn0KzlebrUYwAAAABJRU5ErkJggg=="""
+            ),
+        ),
+        "file2": (
+            "add.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJvSURBVDjLpZPrS5NhGIf9W7YvBYOkhlko
 qCklWChv2WyKik7blnNris72bi6dus0DLZ0TDxW1odtopDs4D8MDZuLU0kXq61CijSIIasOvv94V
@@ -751,10 +1004,16 @@ w8jSpR7GBE123uFEYAzaDRIqX/2JAtJbDat/COkd7CNBva2cMvq0MGxp0PRSCPF8BXjWG3FgNHc9
 XPT71Ojy3sMFdfJRCeKxEsVtKwFHwALZfCUk3tIfNR8XiJwc1LmL4dg141JPKtj3WUdNFJqLGFVP
 C4OkR4BxajTWsChY64wmCnMxsWPCHcutKBxMVp5mxA1S+aMComToaqTRUQknLTH62kHOVEE+VQnj
 ahscNCy0cMBWsSI0TCQcZc5ALkEYckL5A5noWSBhfm2AecMAjbcRWV0pUTh0HE64TNf0mczcnnQy
-u/MilaFJCae1nw2fbz1DnVOxyGTlKeZft/Ff8x1BRssfACjTwQAAAABJRU5ErkJggg=='''))},
-'forms': {'text': u'--long text\r\n--with boundary\r\n--lookalikes--'}}
+u/MilaFJCae1nw2fbz1DnVOxyGTlKeZft/Ff8x1BRssfACjTwQAAAABJRU5ErkJggg=="""
+            ),
+        ),
+    },
+    "forms": {"text": "--long text\r\n--with boundary\r\n--lookalikes--"},
+}
 
-browser_test_cases['opera8-2png1txt'] = {'data': b64decode(b'''
+browser_test_cases["opera8-2png1txt"] = {
+    "data": b64decode(
+        b"""
 LS0tLS0tLS0tLS0tekVPOWpRS21MYzJDcTg4YzIzRHgxOQ0KQ29udGVudC1EaXNwb3NpdGlvbjog
 Zm9ybS1kYXRhOyBuYW1lPSJmaWxlMSI7IGZpbGVuYW1lPSJhcnJvd19icmFuY2gucG5nIg0KQ29u
 dGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9h
@@ -785,9 +1044,15 @@ Ph2rJfL1MeVP2weWvHp8s3ziNZ49i1q6HrR1YHGBNnt1dG2Z++gC4TdvrqNkK1eHj7ljQ/ujHx6N
 yPw8BFIiKPmNpKar7P7xb/zyT9P+o7OYvzzYSUt8U+TzxytodixEfgN3CFlQMNAcMgAAAABJRU5E
 rkJggg0KLS0tLS0tLS0tLS0tekVPOWpRS21MYzJDcTg4YzIzRHgxOQ0KQ29udGVudC1EaXNwb3Np
 dGlvbjogZm9ybS1kYXRhOyBuYW1lPSJ0ZXh0Ig0KDQpibGFmYXNlbCDDtsOkw7wNCi0tLS0tLS0t
-LS0tLXpFTzlqUUttTGMyQ3E4OGMyM0R4MTktLQ0K'''),
-'boundary':'----------zEO9jQKmLc2Cq88c23Dx19',
-'files': {'file1': (u'arrow_branch.png', 'image/png', b64decode(b'''
+LS0tLXpFTzlqUUttTGMyQ3E4OGMyM0R4MTktLQ0K"""
+    ),
+    "boundary": "----------zEO9jQKmLc2Cq88c23Dx19",
+    "files": {
+        "file1": (
+            "arrow_branch.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAHYSURBVDjLlVLPS1RxHJynpVu7KEn0Vt+2
 l6IO5qGCIsIwCPwD6hTUaSk6REoUHeoQ0qVAMrp0COpY0SUIPVRgSl7ScCUTst6zIoqg0y7lvpnP
@@ -798,8 +1063,14 @@ QXg29QL3jz3y1oqwbvkhCuYEOQMp/HeJohCbICMUVwr0DvZcOnK9u7GmQNmBQLJCgORxkneqRmAs
 jYjSYuncngtdhakbM5dXlhgTNEMYLqB9q49MKgsPjTBXntVgkDNIgmI1VY2Q7QzgJ9rx++ci3ofz
 iBYiiELQEUAyhB/D29M3Zy+uIkDIhGYvgeKvIkbHxz6Tevzq6ut+ANh9fldetMn80OzZVVdgLFjB
 Q0tpEz68jcB4ifx3pQeictVXIEETnBPCKMLEwBIZAPJD767V/ETGwsjzYYiC6vzEP9asLo3SGuQv
-AAAAAElFTkSuQmCC''')),
-          'file2': (u'award_star_bronze_1.png', 'image/png', b64decode(b'''
+AAAAAElFTkSuQmCC"""
+            ),
+        ),
+        "file2": (
+            "award_star_bronze_1.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJvSURBVDjLhZNNSFRRFIC/N++9eWMzhkl/
 ZJqFMQMRFvTvImkXSdKiVRAURBRRW1eZA9EqaNOiFlZEtQxKyrJwUS0K+qEQzaTE/AtLHR3Hmffu
@@ -812,10 +1083,16 @@ zDTi50AMVngJNgrnUweRbwMPiLpHrOJDOl9Vh6HD7GyO52qa0VPj6MwUJpNC5mYQS/DUJLH3zzRp
 1cqN8YulTUyODBBzt4X6Ou870z2I8ZHsHJLLYNQ8jusQ6+2exJf9BfivKdAymKZiaVdodhBRAagA
 jIbgzxp20lwb6Vp0jADYkQO6IpHfuoqInSJUVoE2HrpyRQ1tic2LC9p3lSHWPh2rJfL1MeVP2weW
 vHp8s3ziNZ49i1q6HrR1YHGBNnt1dG2Z++gC4TdvrqNkK1eHj7ljQ/ujHx6NyPw8BFIiKPmNpKar
-7P7xb/zyT9P+o7OYvzzYSUt8U+TzxytodixEfgN3CFlQMNAcMgAAAABJRU5ErkJggg=='''))},
-'forms': {'text': u'blafasel öäü'}}
+7P7xb/zyT9P+o7OYvzzYSUt8U+TzxytodixEfgN3CFlQMNAcMgAAAABJRU5ErkJggg=="""
+            ),
+        ),
+    },
+    "forms": {"text": "blafasel öäü"},
+}
 
-browser_test_cases['webkit3-2png1txt'] = {'data': b64decode(b'''
+browser_test_cases["webkit3-2png1txt"] = {
+    "data": b64decode(
+        b"""
 LS0tLS0tV2ViS2l0Rm9ybUJvdW5kYXJ5amRTRmhjQVJrOGZ5R055Ng0KQ29udGVudC1EaXNwb3Np
 dGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlMSI7IGZpbGVuYW1lPSJndGstYXBwbHkucG5nIg0K
 Q29udGVudC1UeXBlOiBpbWFnZS9wbmcNCg0KiVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACN
@@ -858,9 +1135,15 @@ mIf3fVgCGMLfz+CPf+CXPfgZCIFz4ExEkpeWfH0opZzcKYUsI38nIy5D4BK4kgnAfwLblOaQdQsS
 AAAAAElFTkSuQmCCDQotLS0tLS1XZWJLaXRGb3JtQm91bmRhcnlqZFNGaGNBUms4ZnlHTnk2DQpD
 b250ZW50LURpc3Bvc2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9InRleHQiDQoNCnRoaXMgaXMgYW5v
 dGhlciB0ZXh0IHdpdGggw7xtbMOkw7x0cw0KLS0tLS0tV2ViS2l0Rm9ybUJvdW5kYXJ5amRTRmhj
-QVJrOGZ5R055Ni0tDQo='''),
-'boundary':'----WebKitFormBoundaryjdSFhcARk8fyGNy6',
-'files': {'file1': (u'gtk-apply.png', 'image/png', b64decode(b'''
+QVJrOGZ5R055Ni0tDQo="""
+    ),
+    "boundary": "----WebKitFormBoundaryjdSFhcARk8fyGNy6",
+    "files": {
+        "file1": (
+            "gtk-apply.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAAN1wAADdcBQiibeAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAANnSURB
 VDiNldJ9aJVVHAfw7znPuS/PvW4405WbLWfbsBuNbramq5Tp7mLqIFPXINlwpAitaCAPjWKgBdXz
@@ -878,8 +1161,14 @@ Oz0gEUIgpDKPxGjr/VlLanZubJknXLMYiH8PjccwK26C27Oouu8tfHysWbs6HnkxrPATdwVTLaSy
 zW63+8BLzzX6H1lSSrtjBzFpRPBkZi0mrk3Z7Z2tP5xqMiruhP0PTKL5EqMnSgKr87eUvSqPGf3I
 psux53CDpie0QFjhf90NhBDiVlJ1LaqmcqXq2l/7aU7826E94rWjQb3iXbYXgAzAC8ADwI1//zF1
 OkQIAUIIBSAlc6tfpkjr52XTj4SFi937eP3MmDAB2I5YyaT63AmyuVDHmAAQt0FOzARg/aeGhBCS
-3EjnCBygMwKAnXL+AdDkiZ/xYgR3AAAAAElFTkSuQmCC''')),
-          'file2': (u'gtk-no.png', 'image/png', b64decode(b'''
+3EjnCBygMwKAnXL+AdDkiZ/xYgR3AAAAAElFTkSuQmCC"""
+            ),
+        ),
+        "file2": (
+            "gtk-no.png",
+            "image/png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAAN1wAADdcBQiibeAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAM1SURB
 VDiNrZTPaxtHFMc/M7uzs7KobckyDjQxtoPbnlJyMBRKgsGFHkwvvfbuU/+BQCilBHrof+BT7zmV
@@ -896,10 +1185,16 @@ CWgBdAv5PuL7NMMwyWB3DHwksh8nyc6v5+dDU62ilcIZdR93AqQLKYVbrfLb8+fDOEl2ip/F+KRc
 wdZRvz9oDgboWg2MQSYakeXvGIOen+d4MKDR6w2vYKvgjM+yUmrqM/h4Bb69ba1/r1z2SlGEmyQj
 EwPiusTGMPA8fuz348PhcPg7fP4d/AC8EJHoOnAGqC3C8qfwZVWptXc9z1nQ2qm5I3cFacppmmZ/
 RVF6LlJ/DN88gybwAvj3JWAOnQZqQOUjuHcTPpiH931YAhjC38/gj3/glz34GQiBc+BMRJKXlnx9
-KKWc3CmFLCN/JyMuQ+ASuJIJwH8C25TmkHULEgAAAABJRU5ErkJggg=='''))},
-'forms': {'text': u'this is another text with ümläüts'}}
+KKWc3CmFLCN/JyMuQ+ASuJIJwH8C25TmkHULEgAAAABJRU5ErkJggg=="""
+            ),
+        ),
+    },
+    "forms": {"text": "this is another text with ümläüts"},
+}
 
-browser_test_cases['ie6-2png1txt'] = {'data': b64decode(b'''
+browser_test_cases["ie6-2png1txt"] = {
+    "data": b64decode(
+        b"""
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS03ZDkxYjAzYTIwMTI4DQpDb250ZW50LURpc3Bv
 c2l0aW9uOiBmb3JtLWRhdGE7IG5hbWU9ImZpbGUxIjsgZmlsZW5hbWU9IkM6XFB5dGhvbjI1XHd6
 dGVzdFx3ZXJremV1Zy1tYWluXHRlc3RzXG11bHRpcGFydFxmaXJlZm94My0ycG5nMXR4dFxmaWxl
@@ -931,9 +1226,15 @@ SOeDNsZVVvO9L8WNoa30NTzGVFEl1MIwMTNGO7JnUXBoV72P53h55xo93V0/E1NKV9YebW/nL8TM
 GK1uVengktnl/rIFs7Borm2wP71zfeOr9/zDb6ZFKM6WU+GQAAAAAElFTkSuQmCCDQotLS0tLS0t
 LS0tLS0tLS0tLS0tLS0tLS0tLS0tLTdkOTFiMDNhMjAxMjgNCkNvbnRlbnQtRGlzcG9zaXRpb246
 IGZvcm0tZGF0YTsgbmFtZT0idGV4dCINCg0KaWU2IHN1Y2tzIDotLw0KLS0tLS0tLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS03ZDkxYjAzYTIwMTI4LS0NCg=='''),
-'boundary':'---------------------------7d91b03a20128',
-'files': {'file1': (u'file1.png', 'image/x-png', b64decode(b'''
+LS0tLS0tLS0tLS0tLS03ZDkxYjAzYTIwMTI4LS0NCg=="""
+    ),
+    "boundary": "---------------------------7d91b03a20128",
+    "files": {
+        "file1": (
+            "file1.png",
+            "image/x-png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAGdSURBVDjLpVMxa8JAFL6rAQUHXQoZpLU/
 oUOnDtKtW/MDBFHHThUKTgrqICgOEtd2EVxb2qFkKTgVChbSCnZTiVBEMBRLiEmafleCDaWxDX3w
@@ -943,8 +1244,14 @@ BW7rdDo2I6ZSKeq7B8x0XV/bwJWAJEnHSMwBDUEQWq5GfsJthUJhlVuv11uckyiGgiH2RWK73RYR
 b2cymbG7gnK5vIX9USwWI1yAI/KjLGK7teEI8HN1TizrnZWdRxxsNps8vI3YLpVKbB2EWB6XkMHz
 gAlvriYRSW+app1Mpy/jSCRSRSyDUON5nuJGytaAHI/vVPv9p/FischivL96gEP2bGxorhVFqYXD
 YQFCScwBYa9EKU1OlAkB+QLEU2AGaJ7PWKlUDiF2BBw4P9Mt/KUoije+5uAv9gGcjD6Kg4wu3AAA
-AABJRU5ErkJggg==''')),
-          'file2': (u'file2.png', 'image/x-png', b64decode(b'''
+AABJRU5ErkJggg=="""
+            ),
+        ),
+        "file2": (
+            "file2.png",
+            "image/x-png",
+            b64decode(
+                b"""
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAAK/INwWK6QAAABl0RVh0
 U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAJRSURBVBgZpcHda81xHMDx9+d3fudYzuYw
 2RaZ5yTWolEiuZpCSjGJFEktUUr8A6ZxQZGHmDtqdrGUXHgoeZqSp1F2bLFWjtkOB8PZzvmd7+dj
@@ -957,54 +1264,113 @@ P56QmL2GXG8zsfFCz8skA1mQXKbaU3X8ISIgQsgDcun7FL7cJjFnLUMfLyLRr0SLS4hbhiup5Szd
 KFu4jvynJiIxIzcwg/SjF1RsOk9R+QJMlZCvqvwhQFdbM4XvrynIVHpfn2ZSWYyhzHS+PUtSueUC
 0cQ0QmpGyE9197TUnwzq1DnUKbXSxOb6S7xtPkjngzbGVVbzvS/FjaGt9DU8xlRRJdTCMDEzRjuy
 Z1FwaFe9j+d4eecaPd1dPxNTSlfWHm1v5y/EzBitblXp4JLZ5f6yBbOwaK5tsD+9c33jq/f8w2+m
-RSjOllPhkAAAAABJRU5ErkJggg=='''))},
-'forms': {'text': u'ie6 sucks :-/'}}
-
-class TestWerkzeugExamples(PushTestBase):
-    def test_werkzeug_examples(self):
-        """Tests multipart parsing against data collected from webbrowsers"""
-        for name in browser_test_cases:
-            self.reset(
-                boundary=browser_test_cases[name]['boundary'],
-                strict=True,
-                header_charset='utf8'
-            )
-            files = browser_test_cases[name]['files']
-            forms = browser_test_cases[name]['forms']
-            self.parse(browser_test_cases[name]['data'])
-
-            for field in files:
-                segment, body = self.get_segment(field)
-                self.assertTrue(segment.complete)
-                self.assertEqual(segment.name, field)
-                self.assertEqual(segment.filename, files[field][0])
-                self.assertEqual(segment.content_type, files[field][1])
-                self.assertEqual(body, files[field][2])
-            for field in forms:
-                segment, body = self.get_segment(field)
-                self.assertEqual(segment.name, field)
-                self.assertEqual(segment.filename, None)
-                self.assertEqual(segment.content_type, None)
-                self.assertEqual(body.decode(segment.charset or 'utf8'), forms[field])
+RSjOllPhkAAAAABJRU5ErkJggg=="""
+            ),
+        ),
+    },
+    "forms": {"text": "ie6 sucks :-/"},
+}
 
 
+class TestLegacyBrowsers(PushTestBase):
+    """These examples were present in very early versions of the werkzeug
+    library test suite (BSD license) and are used here to show that even ancient
+    browsers generate more or less compatible multippart streams. Upload- and
+    text-field content was replaced with short strings to make avoid large
+    binary blobs here, but other than that all payloads are byte-identical to
+    the original examples."""
 
-class TestRealWorldExamples(PushTestBase):
-    def test_special_characters(self):
-        """ Test the ultimate segment name/filename from hell. """
-        teststring = 'test \\ \\\\ ; ö " = ;'
-        firefox_131 = ['---------------------------3697486332756351920303607403',
-b'-----------------------------3697486332756351920303607403\r\nContent-Disposition: form-data; name="test \\ \\\\ ; \xc3\xb6 %22 = ;"; filename="test \\ \\\\ ; \xc3\xb6 %22 = ;"\r\nContent-Type: application/octet-stream\r\n\r\ntest \\ \\\\ ; \xc3\xb6 " = ;\r\n-----------------------------3697486332756351920303607403--\r\n']
-        chrome_129 = ["----WebKitFormBoundary9duA54BXJUGUymtb", 
-b'------WebKitFormBoundary9duA54BXJUGUymtb\r\nContent-Disposition: form-data; name="test \\ \\\\ ; \xc3\xb6 %22 = ;"; filename="test \\ \\\\ ; \xc3\xb6 %22 = ;"\r\nContent-Type: application/octet-stream\r\n\r\ntest \\ \\\\ ; \xc3\xb6 " = ;\r\n------WebKitFormBoundary9duA54BXJUGUymtb--\r\n']
+    def test_firefox3(self):
+        self.reset(boundary="---------------------------186454651713519341951581030105")
+        self.parse(
+            b"-----------------------------186454651713519341951581030105\r\n",
+            b'Content-Disposition: form-data; name="file1"; filename="anchor.png"\r\n',
+            b"Content-Type: image/png\r\n",
+            b"\r\n",
+            b"[file1-data]\r\n",
+            b"-----------------------------186454651713519341951581030105\r\n",
+            b'Content-Disposition: form-data; name="file2"; filename="application_edit.png"\r\n',
+            b"Content-Type: image/png\r\n",
+            b"\r\n",
+            b"[file2-data]\r\n",
+            b"-----------------------------186454651713519341951581030105\r\n",
+            b'Content-Disposition: form-data; name="text"\r\n',
+            b"\r\n",
+            b"[Text]\r\n",
+            b"-----------------------------186454651713519341951581030105--\r\n",
+        )
+        self.assertFileSegment("file1", "anchor.png", b"[file1-data]")
+        self.assertFileSegment("file2", "application_edit.png", b"[file2-data]")
+        self.assertTextSegment("text", "[Text]")
 
-        for boundary, body in [firefox_131, chrome_129]:
-            print(repr(boundary))
-            print(repr(body))
-            self.reset(boundary=boundary, strict=True, header_charset='utf8')
-            self.parse(body)
-            segment, body = self.get_segment(teststring)
-            self.assertEqual(segment.name, teststring)
-            self.assertEqual(segment.filename, teststring)
-            self.assertEqual(body, teststring.encode("utf8"))
+    def test_opera8(self):
+        self.reset(boundary="----------zEO9jQKmLc2Cq88c23Dx19")
+        self.parse(
+            b"------------zEO9jQKmLc2Cq88c23Dx19\r\n",
+            b'Content-Disposition: form-data; name="file1"; filename="arrow_branch.png"\r\n',
+            b"Content-Type: image/png\r\n",
+            b"\r\n",
+            b"[file1-data]\r\n",
+            b"------------zEO9jQKmLc2Cq88c23Dx19\r\n",
+            b'Content-Disposition: form-data; name="file2"; filename="award_star_bronze_1.png"\r\n',
+            b"Content-Type: image/png\r\n",
+            b"\r\n",
+            b"[file2-data]\r\n",
+            b"------------zEO9jQKmLc2Cq88c23Dx19\r\n",
+            b'Content-Disposition: form-data; name="text"\r\n',
+            b"\r\n",
+            b"[Text]\r\n",
+            b"------------zEO9jQKmLc2Cq88c23Dx19--\r\n",
+        )
+        self.assertFileSegment("file1", "arrow_branch.png", b"[file1-data]")
+        self.assertFileSegment("file2", "award_star_bronze_1.png", b"[file2-data]")
+        self.assertTextSegment("text", "[Text]")
 
+    def test_webkit3(self):
+        self.reset(boundary="----WebKitFormBoundaryjdSFhcARk8fyGNy6")
+        self.parse(
+            b"------WebKitFormBoundaryjdSFhcARk8fyGNy6\r\n",
+            b'Content-Disposition: form-data; name="file1"; filename="gtk-apply.png"\r\n',
+            b"Content-Type: image/png\r\n",
+            b"\r\n",
+            b"[file1-data]\r\n",
+            b"------WebKitFormBoundaryjdSFhcARk8fyGNy6\r\n",
+            b'Content-Disposition: form-data; name="file2"; filename="gtk-no.png"\r\n',
+            b"Content-Type: image/png\r\n",
+            b"\r\n",
+            b"[file2-data]\r\n",
+            b"------WebKitFormBoundaryjdSFhcARk8fyGNy6\r\n",
+            b'Content-Disposition: form-data; name="text"\r\n',
+            b"\r\n",
+            b"[Text]\r\n",
+            b"------WebKitFormBoundaryjdSFhcARk8fyGNy6--\r\n",
+        )
+        self.assertFileSegment("file1", "gtk-apply.png", b"[file1-data]")
+        self.assertFileSegment("file2", "gtk-no.png", b"[file2-data]")
+        self.assertTextSegment("text", "[Text]")
+
+    def test_ie6(self):
+        """The only interesting test of the legacy test suite because Internet
+        Explorer of cause fails to follow the RFC. Who would have guessed?"""
+
+        self.reset(boundary="---------------------------7d91b03a20128")
+        self.parse(
+            b"-----------------------------7d91b03a20128\r\n",
+            b'Content-Disposition: form-data; name="file1"; filename="C:\\Python25\\wztest\\werkzeug-main\\tests\\multipart\\firefox3-2png1txt\\file1.png"\r\n',
+            b"Content-Type: image/x-png\r\n",
+            b"\r\n",
+            b"[file1-data]\r\n",
+            b"-----------------------------7d91b03a20128\r\n",
+            b'Content-Disposition: form-data; name="file2"; filename="C:\\Python25\\wztest\\werkzeug-main\\tests\\multipart\\firefox3-2png1txt\\file2.png"\r\n',
+            b"Content-Type: image/x-png\r\n",
+            b"\r\n",
+            b"[file2-data]\r\n",
+            b"-----------------------------7d91b03a20128\r\n",
+            b'Content-Disposition: form-data; name="text"\r\n',
+            b"\r\n",
+            b"[Text]\r\n",
+            b"-----------------------------7d91b03a20128--\r\n",
+        )
+        self.assertFileSegment("file1", "file1.png", b"[file1-data]")
+        self.assertFileSegment("file2", "file2.png", b"[file2-data]")
+        self.assertTextSegment("text", "[Text]")
