@@ -32,8 +32,8 @@ class PushTestBase(unittest.TestCase):
         self.events = []
 
     @contextmanager
-    def assertParseError(self, errortext):
-        with self.assertRaises(multipart.MultipartError) as r:
+    def assertParseError(self, errortext, klass=multipart.MultipartError):
+        with self.assertRaises(klass) as r:
             yield
         fullmsg = " ".join(map(str, r.exception.args))
         self.assertTrue(errortext in fullmsg, f"{errortext!r} not in {fullmsg!r}")
@@ -301,6 +301,28 @@ class TestPushParser(PushTestBase):
             self.parse(b"x" * 9)
             self.parse(b"\r\n--boundary--")
 
+    def test_segment_clen_bad_value(self):
+        for value in ["+4", "-4", "٤"]:
+            self.reset()
+            self.parse("--boundary\r\n")
+            self.parse("Content-Disposition: form-data; name=foo\r\n")
+            with self.assertParseError("Invalid segment Content-Length header value"):
+                self.parse(f"Content-Length: {value}\r\n")
+                self.parse("\r\n")
+                self.parse("x" * 4)
+                self.parse("\r\n--boundary--")
+
+    def test_content_length_limit(self):
+        self.reset(max_segment_size = 1024)
+        self.parse("--boundary\r\n")
+        self.parse("Content-Disposition: form-data; name=foo\r\n")
+        with self.assertParseError(
+            "Segment Content-Length larger than maximum segment size", multipart.ParserLimitReached):
+            self.parse(f"Content-Length: 1025\r\n")
+            self.parse("\r\n")
+            self.parse("x" * 1024)
+            self.parse("\r\n--boundary--")
+
     def test_segment_handle_access(self):
         self.parse(b"--boundary\r\n")
         self.parse(b"Content-Disposition: form-data; name=foo; filename=bar.txt\r\n")
@@ -447,14 +469,14 @@ class TestPushParser(PushTestBase):
             self.parse('--boundary\r\n',
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n',
-                   'Bad header\r\n', '\r\n', 'abc'*1024+'\r\n', '--boundary--')
+                   'Bad header\r\n', '\r\n', 'abc'*1024, '\r\n--boundary--')
 
-    def test_content_length_to_small(self):
+    def test_invalid_header_name(self):
         with self.assertRaises(multipart.MultipartError):
             self.parse('--boundary\r\n',
                    'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
                    'Content-Type: image/png\r\n',
-                   'Content-Length: 111\r\n', '\r\n', 'abc'*1024, '\r\n--boundary--')
+                   'Bad header: value\r\n', '\r\n', 'abc'*1024, '\r\n--boundary--')
 
     def test_no_disposition_header(self):
         with self.assertRaises(multipart.MultipartError):
