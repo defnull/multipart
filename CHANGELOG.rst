@@ -10,6 +10,18 @@ changes, even if they technically change behavior from *incorrect* to *correct*
 and may break applications that rely on *incorrect* or *undefined* behavior or
 *undocumented* APIs.
 
+
+Release 1.4
+===========
+
+**Not released yet**
+
+* feat: More strict (and also faster) header validation within segments.
+* feat: :class:`PushMultipartParser` is now easier to sub-class to support
+  alternative multipart types (e.g. ``multipart/byterange``).
+* change: :attr:`MultipartSegment.name`` is now typed as optional, but is still
+  guaranteed to be a string for unmodified versions of the parser.
+
 Release 1.3
 ===========
 
