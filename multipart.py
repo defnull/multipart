@@ -214,11 +214,13 @@ class _cached_property:
 
 # ASCII minus control or special chars
 _token = "[a-zA-Z0-9-!#$%&'*+.^_`|~]+"
-_re_token = re.compile("^%s$" % _token, re.ASCII)
+_re_token = re.compile(_token, re.ASCII)
+_hname = "[a-zA-Z0-9-_]+"
+_re_hname = re.compile(_hname, re.ASCII)
 # A token or quoted-string (simple qs | token | slow qs)
 _value = r'"[^\\"]*"|%s|"(?:\\.|[^"])*"' % _token
 # A "; key=value" pair from content-disposition header
-_option = r"; *(%s) *= *(%s)" % (_token, _value)
+_option = r"; *(%s) *= *(%s)" % (_hname, _value)
 _re_option = re.compile(_option)
 
 
@@ -228,7 +230,7 @@ def header_quote(val):
     Note: This is NOT the way modern browsers quote field names or filenames
     in Content-Disposition headers. See :func:`content_disposition_quote`
     """
-    if _re_token.match(val):
+    if _re_token.fullmatch(val):
         return val
 
     return '"' + val.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -308,8 +310,10 @@ def parse_options_header(header, options=None, unquote=header_unquote):
 ##############################################################################
 
 
-# Constants used by the parser
-_HEADER_EXPECTED = frozenset(["Content-Disposition", "Content-Type", "Content-Length"])
+# Known-good header names, used to skip costly validity checks.
+_KNOWN_HEADERS = set(
+    ["Content-Disposition", "Content-Type", "Content-Length", "Content-Range"]
+)
 # Parser states as constants
 _PREAMBLE = "PREAMBLE"
 _HEADER = "HEADER"
@@ -673,9 +677,8 @@ class PushMultipartParser:
             name = name.strip().title()
             if not col or not name:
                 raise ParserError("Malformed segment header")
-            if name not in _HEADER_EXPECTED:
-                if " " in name or not name.isascii() or not name.isprintable():
-                    raise ParserError("Invalid segment header name")
+            if not (name in _KNOWN_HEADERS or _re_hname.fullmatch(name)):
+                raise ParserError("Invalid segment header name")
             value = value.strip()
         except UnicodeDecodeError as err:
             raise ParserError("Segment header failed to decode", err)
