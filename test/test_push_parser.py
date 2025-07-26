@@ -195,13 +195,15 @@ class TestPushParser(PushTestBase):
         with self.assertParseError("Maximum segment header length exceeded"):
             self.parse(b"\tmoooooooooooooooooooooooooore value\r\n")
 
-    def test_header_bad_name(self):
-        self.reset()
+    def test_header_no_colon(self):
         with self.assertParseError("Malformed segment header"):
             self.parse(b"--boundary\r\nno-colon\r\n\r\ndata\r\n--boundary--")
-        self.reset()
-        with self.assertParseError("Malformed segment header"):
+
+    def test_header_empty_name(self):
+        with self.assertParseError("Invalid segment header name"):
             self.parse(b"--boundary\r\n:empty-name\r\n\r\ndata\r\n--boundary--")
+
+    def test_header_bad_name(self):
         for badchar in (b" ", b"\0", b"\r", b"\n", "ö".encode("utf8")):
             self.reset()
             with self.assertParseError("Invalid segment header name"):
@@ -209,7 +211,8 @@ class TestPushParser(PushTestBase):
                     b"--boundary\r\ninvalid%sname:value\r\n\r\ndata\r\n--boundary--"
                     % badchar
                 )
-        self.reset()
+
+    def test_header_bad_unicode(self):
         with self.assertParseError("Segment header failed to decode"):
             self.parse(
                 b"--boundary\r\ninvalid\xc3\x28:value\r\n\r\ndata\r\n--boundary--"
@@ -312,7 +315,17 @@ class TestPushParser(PushTestBase):
                 self.parse("x" * 4)
                 self.parse("\r\n--boundary--")
 
-    def test_content_length_limit(self):
+    def test_segment_clen_repeated(self):
+        self.parse("--boundary\r\n")
+        self.parse("Content-Disposition: form-data; name=foo\r\n")
+        with self.assertParseError("Multiple segment Content-Length headers"):
+            self.parse(f"Content-Length: 1024\r\n")
+            self.parse(f"Content-Length: 1024\r\n")
+            self.parse("\r\n")
+            self.parse("x" * 1024)
+            self.parse("\r\n--boundary--")
+
+    def test_segment_clen_limit(self):
         self.reset(max_segment_size = 1024)
         self.parse("--boundary\r\n")
         self.parse("Content-Disposition: form-data; name=foo\r\n")

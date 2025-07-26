@@ -671,19 +671,21 @@ class PushMultipartParser:
         if len(self._segment_headerlist) >= self.max_header_count:
             raise ParserLimitReached("Maximum segment header count exceeded")
 
-        # Decode headers into header name and value
+        # Decode headerline into normalized (name, value) pairs
         try:
             name, col, value = line.decode(self.header_charset).partition(":")
-            name = name.strip().title()
-            if not col or not name:
-                raise ParserError("Malformed segment header")
-            if not (name in _KNOWN_HEADERS or _re_hname.fullmatch(name)):
-                raise ParserError("Invalid segment header name")
-            value = value.strip()
         except UnicodeDecodeError as err:
             raise ParserError("Segment header failed to decode", err)
+        if not col:
+            raise ParserError("Malformed segment header")
+        name = name.strip().title()
+        value = value.strip()
+        if not (name in _KNOWN_HEADERS or _re_hname.fullmatch(name)):
+            raise ParserError("Invalid segment header name")
 
         if name == "Content-Length":
+            if self._segment_limit >= 0:
+                raise ParserError("Multiple segment Content-Length headers")
             try:
                 content_length = int(value)
                 if content_length < 0 or str(content_length) != value:
