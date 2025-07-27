@@ -85,18 +85,19 @@ calling :meth:`PushMultipartParser.close` explicitly.
 Dealing with IO
 ---------------
 
-The :meth:`parse() <PushMultipartParser.parse>` method does not know how to fetch more
-data, it just stops yielding events and waits for you to call it again with more
-data. This makes the parser loop more complicated than it needs to be in most situations.
+The :meth:`parse() <PushMultipartParser.parse>` method does not know how to
+fetch more data. It just stops yielding events and waits for you to call it
+again with the next chunk. This low-level mode of operation is very flexible,
+but sometimes more complicated than it needs to be.
 
-If you can provide a blocking or async function that returns the next chunk, then
-you can reduce the parser loop complexity a bit and switch to
+If you can provide some blocking or async function that returns the next chunk
+when called, then you can skip some of the complexity of
+:meth:`parse() <PushMultipartParser.parse>` and use
 :meth:`parse_blocking() <PushMultipartParser.parse_blocking>` or
-:meth:`parse_async() <PushMultipartParser.parse_async>`, depending on your
-environment.
+:meth:`parse_async() <PushMultipartParser.parse_async>` instead.
 
-Here is a simplified parser loop that reads from a *blocking* stream like a
-socket or ``environ[wsgi.input]``:
+Here is what the parser loop may look like in a *blocking* environment. Instead
+of an abstract blocking stream you could also read from a socket or ``environ[wsgi.input]``:
 
 .. code-block:: python
 
@@ -107,7 +108,7 @@ socket or ``environ[wsgi.input]``:
         for event in parser.parse_blocking(stream.read):
           pass  # Handle parser events
 
-And here is the same loop with an `awaitable` read function:
+And here is the same loop with an *awaitable* stream:
 
 .. code-block:: python
 
