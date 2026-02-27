@@ -216,7 +216,7 @@ class _cached_property:
 _token = "[a-zA-Z0-9-!#$%&'*+.^_`|~]+"
 _re_token = re.compile("^%s$" % _token, re.ASCII)
 # A token or quoted-string (simple qs | token | slow qs)
-_value = r'"[^\\"]*"|%s|"(?:\\.|[^"])*"' % _token
+_value = r'"[^\\"]*"|%s|"(?:\\.|[^\\"])*"' % _token
 # A "; key=value" pair from content-disposition header
 _option = r"; *(%s) *= *(%s)" % (_token, _value)
 _re_option = re.compile(_option)
@@ -307,7 +307,8 @@ def parse_options_header(header, options=None, unquote=header_unquote):
 ################################## SansIO Parser #############################
 ##############################################################################
 
-
+# Constants used by the parser
+_HEADER_EXPECTED = frozenset(["Content-Disposition", "Content-Type", "Content-Length"])
 # Parser states as constants
 _PREAMBLE = "PREAMBLE"
 _HEADER = "HEADER"
@@ -720,8 +721,9 @@ class MultipartSegment:
             name = name.strip()
             if not col or not name:
                 raise ParserError("Malformed segment header")
-            if " " in name or not name.isascii() or not name.isprintable():
-                raise ParserError("Invalid segment header name")
+            if name not in _HEADER_EXPECTED:
+                if " " in name or not name.isascii() or not name.isprintable():
+                    raise ParserError("Invalid segment header name")
         except UnicodeDecodeError as err:
             raise ParserError("Segment header failed to decode", err)
 
@@ -748,8 +750,14 @@ class MultipartSegment:
             elif h == "Content-Type":
                 self.content_type, args = parse_options_header(v)
                 self.charset = args.get("charset")
-            elif h == "Content-Length" and v.isdecimal():
-                self._clen = int(v)
+            elif h == "Content-Length":
+                try:
+                    content_length = int(v)
+                    if content_length < 0 or str(content_length) != v:
+                        raise ValueError("Not an unsigned ASCII decimal")
+                    self._clen = content_length
+                except ValueError:
+                    pass # Will be an error in 1.4
 
         if self.name is None:
             raise ParserError("Missing Content-Disposition segment header")
