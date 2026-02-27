@@ -39,7 +39,7 @@ from typing import (
     Tuple,
     List,
     Callable,
-    Awaitable,
+    Awaitable
 )
 
 from urllib.parse import parse_qs
@@ -332,8 +332,8 @@ class PushMultipartParser:
     avoiding unnecessary work caused by broken or malicious clients. Fatal
     errors will always trigger exceptions, even in non-strict mode.
 
-    **Limits**: The various limits are meant as safeguards and exceeding any
-    of those limit will trigger :exc:`ParserLimitReached` exceptions.
+    **Limits**: The various ``max_*`` limits are meant as safeguards and
+    exceeding any of those limit will trigger :exc:`ParserLimitReached`.
 
     Parser instances can be used as context managers in a ``with`` statement
     to ensure that :meth:`close` is called after leaving the parser loop. This
@@ -572,22 +572,24 @@ class PushMultipartParser:
     async def parse_async(
         self, read: t_AsyncReader, chunk_size=1024 * 64
     ) -> AsyncGenerator[t_ParserEvent, None]:
-        """Parse the entire multipart stream from an async ``read`` function and
-        return an async generator yielding parser events (see :meth:`parse`).
-        Should be used with ``async from``.
+        """Parse the entire multipart stream by reading chunks from an async
+        ``read(size)`` function. The returned async generator yields parser
+        events similar to :meth:`parse` and can be used in ``async for`` loops.
 
-        This convenience method will try to read and parse chunks of data until
-        the end of the multipart stream is reached or the ``read`` function
-        returns an empty chunk (signaling EOF). If :attr:`content_length` is
-        known, then the parser will only try to read up to this limit.
+        The async ``read(size)`` function should read and return up to ``size``
+        bytes of data per call. Returning an empty chunk signals the end of the
+        input stream. This is compatible with :meth:`asyncio.StreamReader.read`
+        and most other async read methods.
 
-        :param read: An async function that takes `chunk_size` as a parameter
-          and returns a non-empty chunk of data as soon as data is available, or
-          an empty chunk if EOF was detected and there is no data to return.
-          For example: :meth:`asyncio.StreamReader.read`.
-        :param chunk_size: A positive integer limiting maximum size of a single
-          read operation.
+        The parser will not try to read more than :attr:`content_length` bytes,
+        if known. It will also stop reading once the end of the multipart stream
+        is detected, even if more data is available in the input stream.
 
+        :param read: An async read function returning chunks of data from an
+          input stream.
+        :param chunk_size: A positive integer limiting how many bytes are
+          requested per read operation.
+        :yields: Parser events (see :meth:`parse`)
         :raises Exception: Exceptions raised by ``read`` are not handled.
         :raises MultipartError: Same as :meth:`parse`.
 
@@ -610,20 +612,23 @@ class PushMultipartParser:
     def parse_blocking(
         self, read: t_BlockingReader, chunk_size=1024 * 64
     ) -> Generator[t_ParserEvent, None, None]:
-        """Parse the entire multipart stream from a blocking ``read`` function
-        and return a generator yielding parser events (see :meth:`parse`).
+        """Parse the entire multipart stream by reading chunks from a blocking
+        ``read(size)`` function. The returned generator yields parser events
+        similar to :meth:`parse` and can be used in ``for`` loops.
 
-        This convenience method will try to read and parse chunks of data until
-        the end of the multipart stream is reached or the ``read`` function
-        returns an empty chunk (signaling EOF). If :attr:`content_length` is
-        known, then the parser will only try to read up to this limit.
+        The blocking ``read(size)`` function should read and return up to
+        ``size`` bytes of data per call. Returning an empty chunk signals the
+        end of the input stream.
 
-        :param read: A callable that takes `chunk_size` as a parameter
-        and returns a non-empty chunk of data as soon as data is available, or an
-        empty chunk if EOF was detected and there is no data to return. Most
-        blocking read functions work that way.
-        :param chunk_size: A positive integer limiting the maximum chunk size.
+        The parser will not try to read more than :attr:`content_length` bytes,
+        if known. It will also stop reading once the end of the multipart stream
+        is detected, even if more data is available in the input stream.
 
+        :param read: A blocking read function returning chunks of data from an
+          input stream.
+        :param chunk_size: A positive integer limiting how many bytes are
+          requested per read operation.
+        :yields: Parser events (see :meth:`parse`)
         :raises Exception: Exceptions raised by ``read`` are not handled.
         :raises MultipartError: Same as :meth:`parse`.
 
@@ -773,16 +778,17 @@ class MultipartSegment:
     #: whitespace.
     headerlist: List[Tuple[str, str]]
 
-    #: The cleaned up `Content-Disposition` header value without any header
-    #: options. This will always be 'form-data' for HTTP form submissions.
+    #: The lower-cased `Content-Disposition` segment header without header
+    #: options. This will be 'form-data' for valid HTTP form submissions.
     disposition: Optional[str]
-    #: The 'name' option of the `Content-Disposition` header. For `form-data`
-    #: this will always be a string, but the string may be empty.
+    #: The segment 'name' as specified in the `Content-Disposition` segment
+    #: header. For `form-data` this will always be a string, but the string
+    #: may be empty.
     name: Optional[str]
-    #: The optional 'filename' option of the `Content-Disposition` header.
+    #: An optional 'filename' if specified in the `Content-Disposition` header.
     filename: Optional[str]
 
-    #: The cleaned up `Content-Type` segment header without any header options.
+    #: The lower-cased `Content-Type` segment header without header options.
     content_type: Optional[str]
     #: The optional 'charset' option of the `Content-Type` header.
     charset: Optional[str]
@@ -790,8 +796,7 @@ class MultipartSegment:
     #: Segment body size (so far). Will be updated for each chunk of payload
     #: during parsing.
     size: int
-    #: True if the parser detected the end of the segment and no more payload
-    #: chunks are to be expected.
+    #: True if the parser detected the end of the segment and 'size' is final.
     complete: bool
 
     def __init__(self, headerlist: List[Tuple[str, str]]):
