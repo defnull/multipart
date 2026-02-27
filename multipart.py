@@ -55,7 +55,9 @@ from math import inf
 t_ParserEvent: "typing.TypeAlias" = Union["MultipartSegment", bytearray, None]
 t_ByteString: "typing.TypeAlias" = Union[bytes, bytearray]
 t_BlockingReader: "typing.TypeAlias" = Callable[[int], t_ByteString]
+t_BlockingWriter: "typing.TypeAlias" = Callable[[t_ByteString], int]
 t_AsyncReader: "typing.TypeAlias" = Callable[[int], Awaitable[t_ByteString]]
+t_AsyncWriter: "typing.TypeAlias" = Callable[[t_ByteString], Awaitable[int]]
 
 
 ##
