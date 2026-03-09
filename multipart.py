@@ -317,10 +317,10 @@ _KNOWN_HEADERS = set(
     ["Content-Disposition", "Content-Type", "Content-Length", "Content-Range"]
 )
 # Parser states as constants
-_PREAMBLE = "PREAMBLE"
-_HEADER = "HEADER"
-_BODY = "BODY"
-_COMPLETE = "END"
+_PREAMBLE = object()
+_HEADER = object()
+_BODY = object()
+_COMPLETE = object()
 
 
 class PushMultipartParser:
