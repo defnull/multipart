@@ -244,7 +244,7 @@ def header_unquote(val, filename=False):
     Note: This is NOT the way modern browsers quote field names or filenames
     in Content-Disposition headers. See :func:`content_disposition_unquote`
     """
-    if val[0] == val[-1] == '"':
+    if val and val[0] == val[-1] == '"':
         val = val[1:-1]
 
         # fix ie6 bug: full path --> filename
@@ -273,7 +273,7 @@ def content_disposition_unquote(val, filename=False):
     specification (limited percent-encoding, no backslash-encoding).
     """
 
-    if '"' == val[0] == val[-1]:
+    if val and '"' == val[0] == val[-1]:
         val = val[1:-1]
         if '\\"' in val:  # Legacy backslash-escaped quoted strings
             val = val.replace("\\\\", "\\").replace('\\"', '"')
