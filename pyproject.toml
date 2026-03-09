@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "multipart"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dynamic = ["version"]
 license = {text = "MIT License"}
 description = "Parser for multipart/form-data"
@@ -22,12 +22,11 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: CGI Tools/Libraries",
     "Topic :: Internet :: WWW/HTTP :: WSGI",
     "Programming Language :: Python :: 3",
-    'Programming Language :: Python :: 3.8',
-    'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
     'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
 ]
 
 [project.urls]
@@ -67,7 +66,7 @@ testpaths = [ "test" ]
 
 [tool.tox]
 requires = ["tox>=4.19", "tox-uv>=1.26.2"]
-env_list = ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14.0rc1", "type"]
+env_list = ["3.10", "3.11", "3.12", "3.13", "3.14", "type"]
 
 [tool.tox.env_run_base]
 description = "Run test under {env_name} ({env_python})"

@@ -8,7 +8,18 @@ change corrects behavior to match documentation, specification or
 expectation. In other words: Bugfixes do not count as backward incompatible
 changes, even if they technically change behavior from *incorrect* to *correct*
 and may break applications that rely on *incorrect* or *undefined* behavior or
-*undocumented* APIs.
+*undocumented* APIs. EOL Python versions may also be dropped during *minor*
+releases. 
+
+Release 1.4 (not released yet)
+==============================
+
+* change: Dropped support for Python 3.8 and 3.8 (both EOL)
+* change: Raise mor helpful :exc:`ParserStateError` instead of implicit
+  :exc:`AssertionError` or :exc:`TypeError` when the parser is used
+  incorrectly.
+* feat: Hardened (and faster) header validation.
+
 
 Release 1.3
 ===========
