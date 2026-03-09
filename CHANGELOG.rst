@@ -19,6 +19,7 @@ Release 1.4 (not released yet)
   :exc:`AssertionError` or :exc:`TypeError` when the parser is used
   incorrectly.
 * feat: Hardened (and faster) header validation.
+* git: Change default brach to `main`
 
 
 Release 1.3
