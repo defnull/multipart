@@ -355,7 +355,7 @@ class PushMultipartParser:
     ):
         """Create a new parser instance.
 
-        :param boundary: The multipart boundary as found in the Content-Type header.
+        :param boundary: A valid multipart boundary as found in the Content-Type header.
         :param content_length: Expected input size in bytes, or -1 if unknown.
         :param max_header_size: Maximum length of a single header line (name and value).
         :param max_header_count: Maximum number of headers per segment.
@@ -372,6 +372,11 @@ class PushMultipartParser:
         self.max_segment_size = max_segment_size
         self.max_segment_count = max_segment_count
         self.strict = strict
+
+        if not self.boundary:
+            raise ParserStateError("Empty boundary")
+        if b"\n" in self.boundary:
+            raise ParserStateError("Invalid characters in boundary")
 
         # Internal parser state
         self._delimiter = b"\r\n--" + self.boundary

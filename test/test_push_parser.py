@@ -98,6 +98,13 @@ class PushTestBase(unittest.TestCase):
 
 
 class TestPushParser(PushTestBase):
+    def test_init_no_boundary(self):
+        with self.assertParseError("Empty boundary", klass=multipart.ParserStateError):
+            self.reset(boundary="")
+
+    def test_init_bad_boundary(self):
+        with self.assertParseError("Invalid characters in boundary", klass=multipart.ParserStateError):
+            self.reset(boundary="foo\nbar")
 
     @assertRaiseStrict("Unexpected data after end of multipart stream")
     def test_data_after_terminator(self, strict):
