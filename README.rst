@@ -72,6 +72,6 @@ Examples and API documentation can be found at: https://multipart.readthedocs.io
 License
 =======
 
-.. __: https://github.com/defnull/multipart/raw/master/LICENSE
+.. __: https://github.com/defnull/multipart/raw/main/LICENSE
 
 Code and documentation are available under MIT License (see LICENSE__).
