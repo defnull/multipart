@@ -436,14 +436,15 @@ class PushMultipartParser:
         """
 
         try:
-            assert isinstance(chunk, (bytes, bytearray))
-
             if not chunk:
                 self.close()
                 return
 
             if self.closed:
                 raise ParserStateError("Parser closed")
+            
+            if not isinstance(chunk, (bytes, bytearray)):
+                raise ParserStateError("Invalid chunk type")
 
             if self.content_length > -1:
                 available = self._parsed + len(self._buffer) + len(chunk)

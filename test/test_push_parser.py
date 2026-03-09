@@ -42,7 +42,9 @@ class PushTestBase(unittest.TestCase):
         self.events = []
 
     @contextmanager
-    def assertParseError(self, errortext, klass=multipart.MultipartError):
+    def assertParseError(
+        self, errortext, klass: type[Exception] = multipart.MultipartError
+    ):
         with self.assertRaises(klass) as r:
             yield
         self.assertIn(errortext, repr(r.exception))
@@ -105,6 +107,10 @@ class TestPushParser(PushTestBase):
     def test_init_bad_boundary(self):
         with self.assertParseError("Invalid characters in boundary", klass=multipart.ParserStateError):
             self.reset(boundary="foo\nbar")
+
+    def test_bad_chunk_type(self):
+        with self.assertParseError("Invalid chunk type", klass=multipart.ParserStateError):
+            self.parse(5)
 
     @assertRaiseStrict("Unexpected data after end of multipart stream")
     def test_data_after_terminator(self, strict):
