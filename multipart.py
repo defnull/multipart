@@ -182,7 +182,7 @@ class _cached_property:
 _token="[a-zA-Z0-9-!#$%&'*+.^_`|~]+" 
 _re_istoken = re.compile("^%s$" % _token, re.ASCII)
 # A token or quoted-string (simple qs | token | slow qs)
-_value = r'"[^\\"]*"|%s|"(?:\\.|[^"])*"' % _token
+_value = r'"[^\\"]*"|%s|"(?:\\.|[^\\"])*"' % _token
 # A "; key=value" pair from content-disposition header
 _option = r'; *(%s) *= *(%s)' % (_token, _value)
 _re_option = re.compile(_option)
