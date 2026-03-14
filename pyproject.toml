@@ -37,20 +37,6 @@ Changelog = "https://multipart.readthedocs.io/en/latest/changelog.html"
 Source = "https://github.com/defnull/multipart"
 Issues = "https://github.com/defnull/multipart/issues"
 
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-cov",
-    "build",
-    "twine",
-    "tox",
-    "tox-uv",
-]
-docs = [
-    "sphinx>=8,<9",
-    "sphinx-autobuild",
-]
-
 [tool.flit.sdist]
 include = [
   "test/*.py",
@@ -77,4 +63,19 @@ commands = [["pytest"]]
 description = "Run type check on code base"
 deps = ["mypy>=1.11.2", "types-cachetools>=5.5.0.20240820", "types-chardet>=5.0.4.6"]
 commands = [["mypy", "multipart.py"]]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "build",
+    "twine",
+    "tox",
+    "tox-uv",
+]
+docs = [
+    "sphinx>=8,<9",
+    "sphinx-autobuild",
+]
+
 
