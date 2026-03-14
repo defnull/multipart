@@ -22,6 +22,6 @@ jobs:
         python-version: ${{ matrix.python-version }}
         cache: pip
     - name: Install dev dependencies
-      run: pip install .[dev]
+      run: pip install --group dev -e .
     - name: Run tests
       run: pytest -ra -q --cov=multipart --cov-report=term
