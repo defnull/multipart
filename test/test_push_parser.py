@@ -101,12 +101,16 @@ class PushTestBase(unittest.TestCase):
 
 class TestPushParser(PushTestBase):
     def test_init_no_boundary(self):
-        with self.assertParseError("Empty boundary", klass=multipart.ParserStateError):
+        with self.assertParseError("Empty boundary", klass=multipart.ParserError):
             self.reset(boundary="")
 
     def test_init_bad_boundary(self):
-        with self.assertParseError("Invalid characters in boundary", klass=multipart.ParserStateError):
+        with self.assertParseError("Invalid characters in boundary", klass=multipart.ParserError):
             self.reset(boundary="foo\nbar")
+
+    def test_init_bad_header_charset(self):
+        with self.assertParseError("Invalid charset", klass=multipart.ParserError):
+            self.reset(header_charset="does-not-exist")
 
     def test_bad_chunk_type(self):
         with self.assertParseError("Invalid chunk type", klass=multipart.ParserStateError):

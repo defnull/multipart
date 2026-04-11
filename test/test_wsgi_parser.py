@@ -89,6 +89,17 @@ class TestFormParser(BaseParserTest):
         self.environ['CONTENT_LENGTH'] = 'notanumber'
         with self.assertRaises(multipart.MultipartError):
             self.parse_form_data(strict=True)
+
+    def test_invalid_content_type_charset(self):
+        self.environ['CONTENT_TYPE'] = 'multipart/form-data; boundary=foo; charset=does-not-exist'
+        self.write_end()
+        with self.assertRaises(multipart.ParserError):
+            self.parse_form_data(strict=True)
+
+        self.reset().write('a=b')
+        self.environ['CONTENT_TYPE'] = 'application/x-www-form-urlencoded; charset=does-not-exist'
+        with self.assertRaises(multipart.ParserError):
+            self.parse_form_data(strict=True)
     
     def test_invalid_environ(self):
         self.environ['wsgi.input'] = None
@@ -145,4 +156,3 @@ class TestFormParser(BaseParserTest):
         self.parse_form_data(strict=False)
         with self.assertMultipartError("Unexpected end of multipart stream"):
             self.parse_form_data(strict=False, ignore_errors=False)
-

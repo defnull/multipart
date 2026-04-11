@@ -30,6 +30,7 @@ __all__ = [
 
 
 import re
+import codecs
 from io import BufferedRandom, BytesIO
 from typing import (
     Generator,
@@ -91,7 +92,7 @@ class ParserLimitReached(MultipartError):
 
 
 class ParserStateError(MultipartError):
-    """Parser reachend an invalid state (e.g. use after close)"""
+    """Parser is used incorrectly (e.g. use after close)"""
 
     http_status = 500  # Internal Error
 
@@ -207,6 +208,14 @@ class _cached_property:
             return self
         value = obj.__dict__[self.func.__name__] = self.func(obj)
         return value
+
+
+def _is_valid_charset(charset):
+    try:
+        codecs.lookup(charset)
+        return True
+    except (LookupError, TypeError):
+        return False
 
 
 # -------------
@@ -374,9 +383,11 @@ class PushMultipartParser:
         self.strict = strict
 
         if not self.boundary:
-            raise ParserStateError("Empty boundary")
+            raise ParserError("Empty boundary")
         if b"\n" in self.boundary:
-            raise ParserStateError("Invalid characters in boundary")
+            raise ParserError("Invalid characters in boundary")
+        if not _is_valid_charset(header_charset):
+            raise ParserError(f"Invalid charset: {header_charset!r}")
 
         # Internal parser state
         self._delimiter = b"\r\n--" + self.boundary
@@ -432,7 +443,7 @@ class PushMultipartParser:
         :raises ParserError: Input is not a valid multipart stream.
         :raises StrictParserError: Unusual input while parsing in strict mode.
         :raises ParserLimitReached: One of the configured limits reached.
-        :raises ParserStateError: Invalid parser state (e.g. use after close).
+        :raises ParserStateError: Parser used incorrectly (e.g. use after close).
         """
 
         try:
@@ -442,7 +453,7 @@ class PushMultipartParser:
 
             if self.closed:
                 raise ParserStateError("Parser closed")
-            
+
             if not isinstance(chunk, (bytes, bytearray)):
                 raise ParserStateError("Invalid chunk type")
 
@@ -1180,6 +1191,9 @@ def parse_form_data(
 
         content_type, options = parse_options_header(content_type)
         kwargs["charset"] = charset = options.get("charset", charset)
+
+        if not _is_valid_charset(charset):
+            raise ParserError(f"Invalid charset: {charset!r}")
 
         if content_type == "multipart/form-data":
             boundary = options.get("boundary", "")
