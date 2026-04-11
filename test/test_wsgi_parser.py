@@ -134,6 +134,21 @@ class TestFormParser(BaseParserTest):
             self.environ['CONTENT_LENGTH'] = '10'
             self.parse_form_data(strict=True)
 
+    def test_urlencoded_part_limit_exact(self):
+        self.reset().write('a=1&b=2&c=3')
+        self.environ['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+        forms, files = self.parse_form_data(part_limit=3, strict=True)
+        self.assertEqual(forms['a'], '1')
+        self.assertEqual(forms['b'], '2')
+        self.assertEqual(forms['c'], '3')
+        self.assertEqual(len(files), 0)
+
+    def test_urlencoded_part_limit_exceeded(self):
+        self.reset().write('a=1&b=2&c=3')
+        self.environ['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+        with self.assertRaises(multipart.ParserLimitReached):
+            self.parse_form_data(part_limit=2, strict=True)
+
     def test_close_on_error(self):
         self.write_field("file1", 'x'*1024, filename="foo.bin")
         self.write_field("file2", 'x'*1025, filename="foo.bin")

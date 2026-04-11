@@ -43,7 +43,7 @@ from typing import (
     Awaitable
 )
 
-from urllib.parse import parse_qs
+from urllib.parse import unquote_plus as _unquote_plus
 from wsgiref.headers import Headers
 from collections.abc import MutableMapping as DictMixin
 import tempfile
@@ -1154,8 +1154,11 @@ def parse_form_data(
     instances). Text fields that are too big to fit into memory limits are
     treated as file uploads with no filename.
 
-    In case of an url-encoded form request, the total request body size is
-    limited by `memory_limit`. Larger requests will trigger an error.
+    The default limits for :class:`MultipartParser` apply, but can be
+    overridden via keyword arguments. For url-encoded requests, only
+    `memory_limit` and `part_limit` have an effect. They have the same
+    defaults and meaning as with :class:`MultipartParser` and limit the
+    total size and the maximum number of form fields to parse.
 
     :param environ: A WSGI environment dictionary. Only `wsgi.input`,
         `CONTENT_TYPE` and `CONTENT_LENGTH` are used.
@@ -1165,9 +1168,8 @@ def parse_form_data(
         results may be empty or incomplete. If False, then exceptions are
         not suppressed. A value of None (default) throws exceptions in
         strict mode but suppresses errors in non-strict mode.
-    :param kwargs: Additional keyword arguments are forwarded to
-        :class:`MultipartParser`. This is particularly useful to change the
-        default parser limits.
+    :param kwargs: Additional keyword arguments (e.g. limits) passed to
+        the :class:`MultipartParser`.
     :raises MultipartError: See `ignore_errors` parameters.
     """
 
@@ -1217,6 +1219,8 @@ def parse_form_data(
             mem_limit = kwargs.get(
                 "memory_limit", kwargs.get("mem_limit", 1024 * 64 * 128)
             )
+            part_limit = kwargs.get("part_limit", 128)
+
             if content_length > -1:
                 if content_length > mem_limit:
                     raise ParserLimitReached("Memory limit exceeded")
@@ -1228,12 +1232,18 @@ def parse_form_data(
                 if len(data) > mem_limit:
                     raise ParserLimitReached("Memory limit exceeded")
 
-            data = data.decode(charset)
-            data = parse_qs(data, keep_blank_values=True, encoding=charset)
+            fields = data.decode(charset).split("&", part_limit)
+            if len(fields) > part_limit:
+                raise ParserLimitReached("Part limit exceeded")
+            for field in fields:
+                name, sep, value = field.partition("=")
+                if not name:
+                    continue
+                forms.append(
+                    _unquote_plus(name, encoding=charset, errors="replace"),
+                    _unquote_plus(value or "", encoding=charset, errors="replace"),
+                )
 
-            for key, values in data.items():
-                for value in values:
-                    forms.append(key, value)
         elif strict:
             raise StrictParserError("Unsupported Content-Type")
 

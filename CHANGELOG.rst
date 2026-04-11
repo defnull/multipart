@@ -14,12 +14,16 @@ releases.
 Release 1.4 (not released yet)
 ==============================
 
+* feat: Hardened (and faster) header validation.
 * change: Dropped support for Python 3.8 and 3.8 (both EOL)
-* change: Raise mor helpful :exc:`ParserStateError` instead of implicit
+* change: Raise more helpful :exc:`ParserStateError` instead of implicit
   :exc:`AssertionError` or :exc:`TypeError` when the parser is used
   incorrectly.
-* feat: Hardened (and faster) header validation.
-* git: Change default brach to `main`
+* change: Enforce `part_limit` (128 by default) for url-encoded data in
+  `parse_form_data()`. This is consistend with the handling of multipart
+  and an improtant safeguard against denial of service.
+* change: New strict-mode check to reject extremely large boundaries.
+* build: Change default brach to `main`.
 
 
 Release 1.3
@@ -98,6 +102,7 @@ parser, which now serves as the basis for all other parsers.
 * change: Default charset for segment headers and text fields changed to ``utf8``, as recommended by W3C HTTP.
 * change: Default disk and memory limits for ``MultipartParser`` increased, but multiple other limits were introduced to allow finer control. Check if the new defaults still fit your needs.
 * change: Several undocumented APIs were deprecated or removed, some of which were not strictly private but should only be used by the parser itself, not by applications.
+
 
 Release 0.2
 ===========
