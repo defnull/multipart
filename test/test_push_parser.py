@@ -112,6 +112,10 @@ class TestPushParser(PushTestBase):
         with self.assertParseError("Invalid charset", klass=multipart.ParserError):
             self.reset(header_charset="does-not-exist")
 
+    @assertRaiseStrict("Boundary too long")
+    def test_boundary_size_limit(self, strict):
+        self.reset(boundary="x" * 1025, max_header_size=1024, strict=strict)
+
     def test_bad_chunk_type(self):
         with self.assertParseError("Invalid chunk type", klass=multipart.ParserStateError):
             self.parse(5)

@@ -386,6 +386,8 @@ class PushMultipartParser:
             raise ParserError("Empty boundary")
         if b"\n" in self.boundary:
             raise ParserError("Invalid characters in boundary")
+        if self.strict and len(self.boundary) > 1024:
+            raise StrictParserError("Boundary too long")
         if not _is_valid_charset(header_charset):
             raise ParserError(f"Invalid charset: {header_charset!r}")
 
