@@ -55,7 +55,7 @@ based environment:
             else:
               print("Form text field without a filename")
 
-          elif event:  # Non-empty batearray
+          elif event:  # Non-empty bytearray
             print(f"Received {len(event)} bytes of data")
 
           else:  # None
@@ -128,7 +128,7 @@ Buffered Parser
 The :class:`MultipartParser` parser is the lazy blocking cousin of
 :class:`PushMultipartParser`. It can read from a blocking byte stream (e.g.
 ``environ["wsgi.input"]``) and emits :class:`MultipartPart` instances that are
-either memory- or disk-buffered debending on size.
+either memory- or disk-buffered depending on size.
 
 The main benefit is that you no longer have to assemble the payload chunks of
 each segment yourself. It is still a streaming parser, which means you can start
@@ -156,7 +156,7 @@ Here is a basic example for a typical WSGI_ application:
           elif part.size < 1024:
             print(f"{part.name}: Text field ({part.value!r})")
           else:
-            print(f"{part.name}: Test field, but too big to print :/")
+            print(f"{part.name}: Text field, but too big to print :/")
 
         # Free up resources after use
         for part in parser.parts():
@@ -167,7 +167,7 @@ Results are cached, so you can iterate or call :meth:`MultipartParser.get` or
 
 Do not forget to :meth:`close() <MultipartPart.close>` all parts after use to
 remove unused temporary files quicker and avoid :exc:`ResourceWarning`.
-Framework developers may want to add hooks to automatically frees up resources
+Framework developers may want to add hooks to automatically free up resources
 after the request ended.
 
 
@@ -236,4 +236,3 @@ to do its job. Do not forget to add proper error handling.
     environ = dict(os.environ.items())
     environ['wsgi.input'] = sys.stdin.buffer
     forms, files = multipart.parse_form_data(environ)
-

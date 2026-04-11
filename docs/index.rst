@@ -47,7 +47,7 @@ Features and Scope
 * 100% test coverage with test data from actual browsers and HTTP clients.
 * High throughput and low latency (see `benchmarks <https://github.com/defnull/multipart_bench>`_).
 * Predictable memory and disk resource consumption via fine grained limits.
-* Strict mode: Spent less time parsing malicious or broken inputs.
+* Strict mode: Spend less time parsing malicious or broken inputs.
 
 **Scope:** All parsers in this module implement ``multipart/form-data`` as defined by HTML5_
 and RFC7578_, supporting all modern browsers or HTTP clients in use today.
@@ -65,8 +65,8 @@ Installation
 
 ``pip install multipart`` or ``uv add multipart``
 
-Table of Content
-================
+Table of Contents
+=================
 
 .. toctree::
     :maxdepth: 2

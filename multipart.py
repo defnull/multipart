@@ -6,10 +6,9 @@ developers.
 
 https://multipart.readthedocs.io/
 
-Copyright (c) 2010-2025, Marcel Hellkamp
+Copyright (c) 2010-2026, Marcel Hellkamp
 License: MIT (see LICENSE file)
 """
-
 
 __author__ = "Marcel Hellkamp"
 __version__ = "1.4.0-dev"
@@ -40,7 +39,7 @@ from typing import (
     Tuple,
     List,
     Callable,
-    Awaitable
+    Awaitable,
 )
 
 from urllib.parse import unquote_plus as _unquote_plus
@@ -479,7 +478,6 @@ class PushMultipartParser:
             offset = 0
 
             while True:
-
                 if self._state is _PREAMBLE:
                     # Scan for first delimiter (CRLF prefix is optional here)
                     index = buffer.find(delimiter[2:], offset)
@@ -541,7 +539,6 @@ class PushMultipartParser:
                         break  # wait for more data
 
                 elif self._state is _BODY:
-
                     # Ensure there is enough data in buffer to fit a delimiter
                     if offset + d_len + 2 > bufferlen:
                         break  # wait for more data
@@ -890,6 +887,9 @@ class MultipartParser:
         data as needed to return the next part. Results are cached and the same
         part can be requested multiple times without extra cost.
 
+        Note that you should either set `partsize_limit` or `disk_limit` depending
+        on your specific requirements. Both are unlimited by default.
+
         :param stream: A readable byte stream or any other object that implements
           a :meth:`read(size) <io.BufferedIOBase.read>` method.
         :param boundary: The multipart boundary as found in the Content-Type header.
@@ -901,7 +901,7 @@ class MultipartParser:
         :param header_limit: Maximum number of headers per part.
         :param headersize_limit: Maximum length of a single header line (name and value).
         :param part_limit: Maximum number of parts.
-        :param partsize_limit: Maximum content size of a single parts.
+        :param partsize_limit: Maximum content size of a single part.
         :param spool_limit: Parts up to this size are buffered in memory and count
           towards `memory_limit`. Larger parts are spooled to temporary files on
           disk and count towards `disk_limit`.
@@ -970,7 +970,7 @@ class MultipartParser:
             max_segment_count=self.part_limit,
             max_segment_size=self.partsize_limit,
             header_charset=self.charset,
-            strict=self.strict
+            strict=self.strict,
         )
 
         with parser:

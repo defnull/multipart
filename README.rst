@@ -44,7 +44,7 @@ Features
 * 100% test coverage with test data from actual browsers and HTTP clients.
 * High throughput and low latency (see `benchmarks <https://github.com/defnull/multipart_bench>`_).
 * Predictable memory and disk resource consumption via fine grained limits.
-* Strict mode: Spent less time parsing malicious or broken inputs.
+* Strict mode: Spend less time parsing malicious or broken inputs.
 
 Scope and compatibility
 =======================

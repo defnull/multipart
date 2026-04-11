@@ -15,15 +15,15 @@ Release 1.4 (not released yet)
 ==============================
 
 * feat: Hardened (and faster) header validation.
-* change: Dropped support for Python 3.8 and 3.8 (both EOL)
+* change: Dropped support for Python 3.8 and 3.9 (both EOL)
 * change: Raise more helpful :exc:`ParserStateError` instead of implicit
   :exc:`AssertionError` or :exc:`TypeError` when the parser is used
   incorrectly.
 * change: Enforce `part_limit` (128 by default) for url-encoded data in
-  `parse_form_data()`. This is consistend with the handling of multipart
-  and an improtant safeguard against denial of service.
+  `parse_form_data()`. This is consistent with the handling of multipart
+  and an important safeguard against denial of service.
 * change: New strict-mode check to reject extremely large boundaries.
-* build: Change default brach to `main`.
+* build: Change default branch to `main`.
 
 
 Release 1.3
