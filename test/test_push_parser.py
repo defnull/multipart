@@ -513,6 +513,35 @@ class TestPushParser(PushTestBase):
                 "--boundary--",
             )
 
+    def test_reject_boundary_in_payload(self):
+        """The boundary delimiter (e.g. "\r\n--boundary") must not appear in segment
+        bodies."""
+
+        def assert_bad_content(*content):
+            self.reset()
+            with self.assertParseError(
+                "Unexpected bytes after boundary"
+            ):
+                print(
+                    self.parse(
+                        "--boundary\r\n",
+                        'Content-Disposition: form-data; name="bad"\r\n',
+                        "\r\n",
+                        *content,
+                        "\r\n--boundary--",
+                        "",  # trigger close
+                    )
+                )
+
+        assert_bad_content("\r\n--boundary...")
+        assert_bad_content("\r\n--boundary\r")
+        assert_bad_content("\r\n--boundary-")
+
+        # This fake-boundary merges with the next real boundary into a
+        # valid boundary, which is still detected as an error, but with
+        # a different error message.
+        # assert_bad_content("\r\n--boundary")
+
     def test_accept_crln_before_start_boundary(self):
         """While uncommon, a single \\r\\n before and after the first and last
         boundary should be accepted even in strict mode."""

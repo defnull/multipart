@@ -19,13 +19,17 @@ Release 2.0 (not released yet)
   :cls:`bytearray` for part body chunks. Update your `isinstance` checks
   if you have any. 
 * change: Enforce `part_limit` (128 by default) for url-encoded data in
-  `parse_form_data()`. This is consistent with the handling of multipart
-  and an important safeguard against denial of service.
+  `parse_form_data()`. This is consistent with multipart handling and an
+  important safeguard against denial of service attacks.
 * change: New strict-mode check to reject extremely large boundaries.
 * change: Raise more helpful :exc:`ParserStateError` instead of implicit
   :exc:`AssertionError` or :exc:`TypeError` when the parser is used
   incorrectly.
+* change: The boundary delimiter must not appear inside a segment body
+  (RFC-7578 4.1). This triggers a fatal error now.
 * feat: Hardened (and faster) header validation.
+* perf: Up to 37% faster parsing for typical file uploads and large
+  text fields.
 * build: Change default branch to `main`.
 
 

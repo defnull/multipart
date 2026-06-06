@@ -476,8 +476,11 @@ class PushMultipartParser:
             bufferlen = len(buffer)
             offset = 0
 
-            while True:
+            while offset < bufferlen:
                 if self._state is _PREAMBLE:
+                    if bufferlen < d_len:
+                        break  # Not enough data to find the initial delimiter
+
                     # Scan for first delimiter (CRLF prefix is optional here)
                     index = buffer.find(delimiter[2:], offset)
 
@@ -502,16 +505,21 @@ class PushMultipartParser:
                             break  # parsing complete
                         elif tail[0:1] == b"\n":  # Broken client or legacy test case
                             raise ParserError("Invalid line break after first boundary")
-                        elif len(tail) == 2:
+                        elif next_start <= bufferlen:
                             raise ParserError("Unexpected byte after first boundary")
+                        else:  # 2-byte tail not in buffer
+                            offset = max(0, index - 2)
+                            break  # wait for more data
 
                     elif self.strict and bufferlen >= d_len:
                         # No boundary in first chunk -> Fail fast in strict mode
                         # and do not waste time consuming a legacy preamble.
                         raise StrictParserError("Boundary not found in first chunk")
 
-                    # Delimiter not found, skip data until we find one
-                    offset = max(0, bufferlen - (d_len + 1))
+                    # Boundary not found. Skip the preamble, but keep any bytes that may
+                    # belong to a partial boundary at the end of the buffer.
+                    index = buffer.rfind(b"\r", bufferlen - (d_len - 1))
+                    offset = bufferlen if index == -1 else index
                     break  # wait for more data
 
                 elif self._state is _HEADER:
@@ -538,34 +546,52 @@ class PushMultipartParser:
                         break  # wait for more data
 
                 elif self._state is _BODY:
-                    # Scan for delimiter: CRLF + boundary + (CRLF or '--')
+                    # Scan for next boundary: CRLF + boundary
                     index = buffer.find(delimiter, offset)
                     if index > -1:
+                        # Emit everything up to the boundary
+                        if index > offset:
+                            yield self._on_segment_payload(buffer[offset:index])
+                            offset = index
+
                         next_start = index + d_len + 2
                         tail = buffer[next_start - 2 : next_start]
 
-                        if tail == b"\r\n" or tail == b"--":
-                            if index > offset:
-                                yield self._on_segment_payload(buffer[offset:index])
-
-                            offset = next_start
+                        if tail == b"\r\n":
+                            # Normal boundary: CRLF + boundary + CRLF
                             self._on_segment_complete()
                             yield None  # end of segment
+                            offset += d_len + 2
+                            self._on_segment_start()
+                            self._state = _HEADER
+                            continue
+                        elif tail == b"--":
+                            # Final boundary: CRLF + boundary + '--'
+                            self._on_segment_complete()
+                            yield None  # end of segment
+                            offset += d_len + 2
+                            self._state = _COMPLETE
+                            break
+                        elif next_start > bufferlen:  # 2-byte tail not in buffer
+                            break  # wait for more data
+                        else:
+                            raise ParserError("Unexpected bytes after boundary")
 
-                            if tail == b"--":  # Last delimiter
-                                self._state = _COMPLETE
-                                break
-                            else:  # Normal delimiter
-                                self._on_segment_start()
-                                self._state = _HEADER
-                                continue
+                    # Boundary not found. Emit as much data as we can, but keep any bytes
+                    # that may belong to a partial boundary at the end of the buffer.
+                    index = buffer.rfind(b"\r", max(offset, bufferlen - (d_len - 1)))
+                    if index == -1 or not delimiter.startswith(buffer[index:]):
+                        # No partail boundary found, emit everything
+                        # This is a huge deal because it avoids buffer stitching next round
+                        yield self._on_segment_payload(
+                            buffer[offset:] if offset else buffer
+                        )
+                        offset = bufferlen
+                    elif index > offset:
+                        # Potential partial boundary found. Emit data up to that point
+                        yield self._on_segment_payload(buffer[offset:index])
+                        offset = index
 
-                    # Only consume bytes that cannot be part of a partial delimiter at
-                    # the end of the buffer.
-                    flush_until = bufferlen - (d_len + 1)
-                    if flush_until > offset:
-                        yield self._on_segment_payload(buffer[offset:flush_until])
-                        offset = flush_until
                     break  # wait for more data
 
                 else:  # pragma: no cover
