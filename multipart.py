@@ -512,7 +512,7 @@ class PushMultipartParser:
                         raise StrictParserError("Boundary not found in first chunk")
 
                     # Delimiter not found, skip data until we find one
-                    offset = bufferlen - (d_len + 2)
+                    offset = max(0, bufferlen - (d_len + 1))
                     break  # wait for more data
 
                 elif self._state is _HEADER:
