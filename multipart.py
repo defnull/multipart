@@ -538,11 +538,7 @@ class PushMultipartParser:
                         break  # wait for more data
 
                 elif self._state is _BODY:
-                    # Ensure there is enough data in buffer to fit a delimiter
-                    if offset + d_len + 2 > bufferlen:
-                        break  # wait for more data
-
-                    # Scan for delimiter (CRLF + boundary + (CRLF or '--'))
+                    # Scan for delimiter: CRLF + boundary + (CRLF or '--')
                     index = buffer.find(delimiter, offset)
                     if index > -1:
                         next_start = index + d_len + 2
@@ -564,12 +560,12 @@ class PushMultipartParser:
                                 self._state = _HEADER
                                 continue
 
-                    # Keep enough in buffer to accout for a partial delimiter at
-                    # the end, but emit the rest.
-                    chunk_end = bufferlen - (d_len + 1)
-                    assert chunk_end > offset  # Always true
-                    yield self._on_segment_payload(buffer[offset:chunk_end])
-                    offset = chunk_end
+                    # Only consume bytes that cannot be part of a partial delimiter at
+                    # the end of the buffer.
+                    flush_until = bufferlen - (d_len + 1)
+                    if flush_until > offset:
+                        yield self._on_segment_payload(buffer[offset:flush_until])
+                        offset = flush_until
                     break  # wait for more data
 
                 else:  # pragma: no cover
