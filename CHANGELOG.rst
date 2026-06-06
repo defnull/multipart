@@ -11,7 +11,7 @@ and may break applications that rely on *incorrect* or *undefined* behavior or
 *undocumented* APIs. EOL Python versions may also be dropped during *minor*
 releases. 
 
-Release 1.4 (not released yet)
+Release 2.0 (not released yet)
 ==============================
 
 * feat: Hardened (and faster) header validation.
