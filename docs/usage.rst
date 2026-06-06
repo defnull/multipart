@@ -55,7 +55,7 @@ based environment:
             else:
               print("Form text field without a filename")
 
-          elif event:  # Non-empty bytearray
+          elif event:  # Non-empty bytes
             print(f"Received {len(event)} bytes of data")
 
           else:  # None
@@ -69,7 +69,7 @@ consume this event iterator before parsing the next chunk of data.
 
 **Parser Events:** For each multipart segment the parser will emit a single
 instance of :class:`MultipartSegment` with header and meta information, followed
-by zero or more non-empty :class:`bytearray` instances with chunks from the
+by zero or more non-empty :class:`bytes` instances with chunks from the
 segment body, followed by a single :data:`None` event to signal the end of
 the current segment.
 

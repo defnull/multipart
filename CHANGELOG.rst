@@ -14,15 +14,18 @@ releases.
 Release 2.0 (not released yet)
 ==============================
 
-* feat: Hardened (and faster) header validation.
 * change: Dropped support for Python 3.8 and 3.9 (both EOL)
-* change: Raise more helpful :exc:`ParserStateError` instead of implicit
-  :exc:`AssertionError` or :exc:`TypeError` when the parser is used
-  incorrectly.
+* change: :meth:`PushMultipartParser` now emits :cls:`bytes` instead of
+  :cls:`bytearray` for part body chunks. Update your `isinstance` checks
+  if you have any. 
 * change: Enforce `part_limit` (128 by default) for url-encoded data in
   `parse_form_data()`. This is consistent with the handling of multipart
   and an important safeguard against denial of service.
 * change: New strict-mode check to reject extremely large boundaries.
+* change: Raise more helpful :exc:`ParserStateError` instead of implicit
+  :exc:`AssertionError` or :exc:`TypeError` when the parser is used
+  incorrectly.
+* feat: Hardened (and faster) header validation.
 * build: Change default branch to `main`.
 
 

@@ -52,7 +52,7 @@ from math import inf
 
 # Type Aliases (internal use only)
 
-t_ParserEvent: "typing.TypeAlias" = Union["MultipartSegment", bytearray, None]
+t_ParserEvent: "typing.TypeAlias" = Union["MultipartSegment", bytes, None]
 t_ByteString: "typing.TypeAlias" = Union[bytes, bytearray]
 t_BlockingReader: "typing.TypeAlias" = Callable[[int], t_ByteString]
 t_BlockingWriter: "typing.TypeAlias" = Callable[[t_ByteString], int]
@@ -393,7 +393,7 @@ class PushMultipartParser:
         # Internal parser state
         self._delimiter = b"\r\n--" + self.boundary
         self._parsed = 0
-        self._buffer = bytearray()
+        self._buffer = b""
         self._state = _PREAMBLE
 
         self._segment: Optional["MultipartSegment"] = None
@@ -423,9 +423,9 @@ class PushMultipartParser:
 
         **Parser Events:** For each multipart segment the parser will emit a
         single instance of :class:`MultipartSegment` with header and meta
-        information, followed by zero or more non-empty :class:`bytearray`
-        instances with chunks from the segment body, followed by a single
-        :data:`None` event to signal the end of the current segment.
+        information, followed by zero or more non-empty :class:`bytes` with chunks
+        from the segment body, followed by a single :data:`None` event to signal
+        the end of the current segment.
 
         This method does not perform any IO on its own. It stops yielding events
         if more data is needed and should be called again with the next chunk to
@@ -472,8 +472,7 @@ class PushMultipartParser:
 
             delimiter = self._delimiter
             d_len = len(delimiter)
-            buffer = self._buffer
-            buffer += chunk  # In-place append
+            buffer = self._buffer + chunk
             bufferlen = len(buffer)
             offset = 0
 
@@ -577,9 +576,8 @@ class PushMultipartParser:
                     raise RuntimeError(f"Unexpected internal state: {self._state}")
 
             # We ran out of data, or reached the end
-            if offset > 0:
-                self._parsed += offset
-                buffer[:] = buffer[offset:]
+            self._parsed += offset
+            self._buffer = buffer[offset:]
 
         except MultipartError as err:
             if not self.error:
@@ -676,7 +674,7 @@ class PushMultipartParser:
         self._segment_headerlist = []
         self._segment_limit = -1
 
-    def _on_segment_headerline(self, line: Union[bytes, bytearray]):
+    def _on_segment_headerline(self, line: bytes):
         """Parse a raw segment header line, which may be a continuation of a
         previous line in non-strict mode."""
         assert line and self._segment is None
@@ -747,7 +745,7 @@ class PushMultipartParser:
 
         return segment
 
-    def _on_segment_payload(self, chunk: bytearray) -> bytearray:
+    def _on_segment_payload(self, chunk: bytes) -> bytes:
         assert self._segment is not None and not self._segment.complete
         self._segment.size += len(chunk)
         if self._segment.size > self.max_segment_size:
@@ -772,7 +770,7 @@ class PushMultipartParser:
         """
 
         self.closed = True
-        del self._buffer[:]
+        self._buffer = b""
 
         if check_complete and self._state is not _COMPLETE:
             err = ParserError("Unexpected end of multipart stream (parser closed)")
