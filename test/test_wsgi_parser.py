@@ -32,6 +32,10 @@ class TestFormParser(BaseParserTest):
         self.assertEqual(0, len(forms))
         self.assertEqual(0, len(files))
 
+    def test_empty_strict(self):
+        with self.assertRaises(multipart.MultipartError):
+            self.parse_form_data(strict=True)
+
     def test_urlencoded(self):
         for ctype in ('application/x-www-form-urlencoded', 'application/x-url-encoded'):
             self.reset().write('a=b&c=d')
@@ -56,9 +60,14 @@ class TestFormParser(BaseParserTest):
             self.assertEqual(forms['a'], 'ƀ♭')
             self.assertEqual(forms['e'], 'ḟ♮')
 
-    def test_empty(self):
-        with self.assertRaises(multipart.MultipartError):
-            self.parse_form_data(strict=True)
+    def test_urlencoded_empty_name_value(self):
+        " Enpty names are skipped, empty values are just empty"
+        self.reset().write('name_only&empty_value=&=empty_name')
+        self.environ['CONTENT_TYPE'] = 'application/x-www-form-urlencoded'
+        forms, files = self.parse_form_data()
+        self.assertEqual(forms['name_only'], '')
+        self.assertEqual(forms['empty_value'], '')
+        self.assertEqual(len(forms), 2) # Empty names are skipped
 
     def test_wrong_method(self):
         self.environ['REQUEST_METHOD'] = 'GET'
