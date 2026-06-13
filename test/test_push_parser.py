@@ -476,6 +476,20 @@ class TestPushParser(PushTestBase):
         )
         self.parser.close()
 
+    def test_ignore_2byte_junk(self):
+        # Edge case: First chunk is large enough to contain the entire delimiter,
+        # and it contains the boundary, but junk at the beginning prevent a full
+        # delimiter match.
+        self.parse(
+            "ll\r\n--boundary\r",
+            "\n",
+            'Content-Disposition: form-data; name="file1"; filename="random.png"\r\n',
+            "Content-Type: image/png\r\n",
+            "\r\n",
+            "abc\r\n",
+            "--boundary--",
+        )
+
     def test_reject_boundary_in_preamble(self):
         """The RFC defines that a boundary must not appear in segment bodies,
         but technically it is still allowed to appear in the preamble as
