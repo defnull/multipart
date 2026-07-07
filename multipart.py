@@ -210,6 +210,8 @@ class _cached_property:
 
 
 def _is_valid_charset(charset):
+    if charset in _KNOWN_CHARSETS:
+        return True
     try:
         codecs.lookup(charset)
         return True
@@ -320,9 +322,12 @@ def parse_options_header(header, options=None, unquote=header_unquote):
 ##############################################################################
 
 
-# Known-good header names, used to skip costly validity checks.
-_KNOWN_HEADERS = set(
+# Known-good header names and charsets, used to skip costly validity checks.
+_KNOWN_HEADERS = frozenset(
     ["Content-Disposition", "Content-Type", "Content-Length", "Content-Range"]
+)
+_KNOWN_CHARSETS = frozenset(
+    ("utf8", "utf-8", "ascii", "us-ascii", "latin1", "latin-1", "iso-8859-1")
 )
 # Parser states as constants
 _PREAMBLE = object()
