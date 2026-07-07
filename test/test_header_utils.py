@@ -44,3 +44,39 @@ class TestHeaderParser(unittest.TestCase):
         parse = functools.partial(multipart.parse_options_header, unquote=multipart.content_disposition_unquote)
         self.assertEqual(parse(head+'FileName="Te%22s\\\\t.txt"')[1]['filename'], 'Te"s\\\\t.txt')
 
+    def test_content_disposition_parser(self):
+        parse = multipart._parse_content_disposition
+
+        self.assertEqual(parse('form-data; name="field"'), ('form-data', 'field', None))
+        self.assertEqual(parse('form-data; name=""'), ('form-data', '', None))
+        self.assertEqual(
+            parse('form-data; name="file"; filename="test.txt"'),
+            ('form-data', 'file', 'test.txt'),
+        )
+        self.assertEqual(
+            parse('form-data; name="file"; filename=""'),
+            ('form-data', 'file', ''),
+        )
+
+        self.assertEqual(parse('form-data; name="a%22b"'), ('form-data', 'a"b', None))
+        self.assertEqual(
+            parse('form-data; name="a%0Db%0Ac"'),
+            ('form-data', 'a\rb\nc', None),
+        )
+        self.assertEqual(
+            parse('form-data; name="file"; filename="a%22b.txt"'),
+            ('form-data', 'file', 'a"b.txt'),
+        )
+
+        self.assertEqual(
+            parse('form-data; filename="test.txt"; name="field"'),
+            ('form-data', 'field', 'test.txt'),
+        )
+        self.assertEqual(parse('FORM-DATA; name="field"'), ('form-data', 'field', None))
+        self.assertEqual(parse('form-data ; name="field"'), ('form-data', 'field', None))
+        self.assertEqual(parse('form-data; name=field'), ('form-data', 'field', None))
+        self.assertEqual(parse('form-data; name="a\\"b"'), ('form-data', 'a"b', None))
+        self.assertEqual(
+            parse('form-data; name="file"; filename="C:\\fakepath\\test.txt"'),
+            ('form-data', 'file', 'test.txt'),
+        )

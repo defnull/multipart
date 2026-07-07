@@ -281,6 +281,8 @@ def content_disposition_unquote(val, filename=False):
     but there are rare ambiguous edge cases where we have to guess. If in doubt,
     this function assumes a modern browser and follows the WHATWG HTML5
     specification (limited percent-encoding, no backslash-encoding).
+
+    If 'filename' is true, additional windows/ie6 legacy workarounds are applied.
     """
 
     if val and '"' == val[0] == val[-1]:
@@ -289,11 +291,11 @@ def content_disposition_unquote(val, filename=False):
             val = val.replace("\\\\", "\\").replace('\\"', '"')
         elif "%" in val:  # Modern (HTML5) limited percent-encoding
             val = val.replace("%0D", "\r").replace("%0A", "\n").replace("%22", '"')
-        # ie6/windows bug: full path instead of just filename
-        if filename and (val[1:3] == ":\\" or val[:2] == "\\\\"):
-            val = val.rpartition("\\")[-1]
     elif "%" in val:  # Modern (HTML5) limited percent-encoding
         val = val.replace("%0D", "\r").replace("%0A", "\n").replace("%22", '"')
+    # ie6/windows bug: full path instead of just filename
+    if filename and (val[1:3] == ":\\" or val[:2] == "\\\\"):
+        val = val.rpartition("\\")[-1]
     return val
 
 
@@ -315,6 +317,32 @@ def parse_options_header(header, options=None, unquote=header_unquote):
         options[key] = unquote(val, key == "filename")
 
     return header[:i].lower().strip(), options
+
+
+def _parse_content_disposition(value):
+    """Specialized parser for Content-Disposition header values.
+
+    Returns a (disposition type, name, filename) tuple. All three
+    can be empty or invalid, name and filename can be None.
+    """
+    # Fast path for Content-Disposition headers emitted by all modern browsers
+    split = value.split('"', 4)
+    if split[0] == "form-data; name=":
+        if len(split) == 3 and split[2] == "":
+            name = split[1]
+            if "%" in name:
+                name = content_disposition_unquote(name)
+            return "form-data", name, None
+        if len(split) == 5 and split[2] == "; filename=" and split[4] == "":
+            name, filename = split[1], split[3]
+            if "%" in name:
+                name = content_disposition_unquote(name)
+            if "%" in filename or "\\" in filename:
+                filename = content_disposition_unquote(filename, True)
+            return "form-data", name, filename
+    # Slow path for legacy browsers or non-browser clients
+    dtype, opts = parse_options_header(value, unquote=content_disposition_unquote)
+    return dtype, opts.get("name"), opts.get("filename")
 
 
 ##############################################################################
@@ -857,11 +885,9 @@ class MultipartSegment:
 
         for name, value in headerlist:
             if name == "Content-Disposition":
-                self.disposition, args = parse_options_header(
-                    value, unquote=content_disposition_unquote
+                self.disposition, self.name, self.filename = _parse_content_disposition(
+                    value
                 )
-                self.name = args.get("name")
-                self.filename = args.get("filename")
             elif name == "Content-Type":
                 self.content_type, args = parse_options_header(value)
                 self.charset = args.get("charset")
