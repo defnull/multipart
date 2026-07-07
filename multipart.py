@@ -754,10 +754,11 @@ class PushMultipartParser:
             raise ParserError("Segment header failed to decode", err)
         if not col:
             raise ParserError("Malformed segment header")
-        name = name.strip().title()
+        if name not in _KNOWN_HEADERS:
+            name = name.strip().title()
+            if name not in _KNOWN_HEADERS and not _re_hname.fullmatch(name):
+                raise ParserError("Invalid segment header name")
         value = value.strip()
-        if not (name in _KNOWN_HEADERS or _re_hname.fullmatch(name)):
-            raise ParserError("Invalid segment header name")
 
         if name == "Content-Length":
             if self._segment_limit >= 0:
