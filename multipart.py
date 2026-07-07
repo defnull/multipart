@@ -327,13 +327,13 @@ def _parse_content_disposition(value):
     """
     # Fast path for Content-Disposition headers emitted by all modern browsers
     split = value.split('"', 4)
-    if split[0] == "form-data; name=":
-        if len(split) == 3 and split[2] == "":
+    if split[0] == "form-data; name=" and split[-1] == "":
+        if len(split) == 3:
             name = split[1]
             if "%" in name:
                 name = content_disposition_unquote(name)
             return "form-data", name, None
-        if len(split) == 5 and split[2] == "; filename=" and split[4] == "":
+        if len(split) == 5 and split[2] == "; filename=":
             name, filename = split[1], split[3]
             if "%" in name:
                 name = content_disposition_unquote(name)
