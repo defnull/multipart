@@ -14,7 +14,12 @@ releases.
 Release 2.0 (not released yet)
 ==============================
 
-* change: Dropped support for Python 3.8 and 3.9 (both EOL)
+This release drops EOL python versions, improves error handling and
+includes multiple performance improvements that can result in upo to 30%
+faster file uploads and 50% faster text field handling.
+
+* change: Dropped support for Python 3.8 and 3.9 (both EOL), added support
+  for Python 3.14
 * change: :meth:`PushMultipartParser` now emits :cls:`bytes` instead of
   :cls:`bytearray` for part body chunks. Update your `isinstance` checks
   if you have any. 
@@ -28,8 +33,6 @@ Release 2.0 (not released yet)
 * change: The boundary delimiter must not appear inside a segment body
   (RFC-7578 4.1). This triggers a fatal error now.
 * feat: Hardened (and faster) header validation.
-* perf: Up to 37% faster parsing for typical file uploads and large
-  text fields.
 * build: Change default branch to `main`.
 
 
