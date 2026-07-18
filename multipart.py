@@ -11,7 +11,7 @@ License: MIT (see LICENSE file)
 """
 
 __author__ = "Marcel Hellkamp"
-__version__ = "2.0.0-dev"
+__version__ = '2.0.0'
 __license__ = "MIT"
 __all__ = [
     "MultipartError",
