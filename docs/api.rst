@@ -44,6 +44,7 @@ Header parsing
 .. autofunction:: parse_options_header
 .. autofunction:: header_quote
 .. autofunction:: header_unquote 
+.. autofunction:: parse_content_disposition
 .. autofunction:: content_disposition_quote
 .. autofunction:: content_disposition_unquote
 

@@ -45,7 +45,7 @@ class TestHeaderParser(unittest.TestCase):
         self.assertEqual(parse(head+'FileName="Te%22s\\\\t.txt"')[1]['filename'], 'Te"s\\\\t.txt')
 
     def test_content_disposition_parser(self):
-        parse = multipart._parse_content_disposition
+        parse = multipart.parse_content_disposition
 
         self.assertEqual(parse('form-data; name="field"'), ('form-data', 'field', None))
         self.assertEqual(parse('form-data; name=""'), ('form-data', '', None))

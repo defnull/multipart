@@ -21,6 +21,7 @@ __all__ = [
     "ParserStateError",
     "is_form_request",
     "parse_form_data",
+    "parse_content_disposition",
     "MultipartParser",
     "MultipartPart",
     "PushMultipartParser",
@@ -319,13 +320,18 @@ def parse_options_header(header, options=None, unquote=header_unquote):
     return header[:i].lower().strip(), options
 
 
-def _parse_content_disposition(value):
-    """Specialized parser for Content-Disposition header values.
+def parse_content_disposition(value: str) -> tuple[str, str | None, str | None]:
+    """Specialized parser for standard multipart `Content-Disposition` headers.
 
-    Returns a (disposition type, name, filename) tuple. All three
-    can be empty or invalid, name and filename can be None.
+    Returns a ``(disposition, name, filename)`` tuple. For multipart the ``disposition``
+    value should be ``'form-data'``, but this is not enforced. ``name`` and ``filename``
+    can be ``None`` when the corresponding header parameter is missing. Additional
+    parameters are ignored.
+
+    Parameter values are decoded with :func:`content_disposition_unquote` if necessary,
+    but are not otherwise validated or sanitized.
     """
-    # Fast path for Content-Disposition headers emitted by all modern browsers
+    # Fast path for strict Content-Disposition headers emitted by modern browsers
     split = value.split('"', 4)
     if split[0] == "form-data; name=" and split[-1] == "":
         if len(split) == 3:
@@ -886,7 +892,7 @@ class MultipartSegment:
 
         for name, value in headerlist:
             if name == "Content-Disposition":
-                self.disposition, self.name, self.filename = _parse_content_disposition(
+                self.disposition, self.name, self.filename = parse_content_disposition(
                     value
                 )
             elif name == "Content-Type":
