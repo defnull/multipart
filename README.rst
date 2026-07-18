@@ -4,7 +4,7 @@ Python multipart/form-data parser
 
 .. image:: https://github.com/defnull/multipart/actions/workflows/test.yaml/badge.svg
     :target: https://github.com/defnull/multipart/actions/workflows/test.yaml
-    :alt: Tests Status
+    :alt: CI Status
 
 .. image:: https://img.shields.io/pypi/v/multipart.svg
     :target: https://pypi.python.org/pypi/multipart/

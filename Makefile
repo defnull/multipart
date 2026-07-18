@@ -5,7 +5,7 @@ $(VENV)/.installed: Makefile pyproject.toml
 	python3 -mvenv $(VENV)
 	$(VENV)/bin/python3 -m ensurepip
 	$(VENV)/bin/pip install -q -U pip
-	$(VENV)/bin/pip install -q -e .[dev,docs]
+	$(VENV)/bin/pip install -q -e . --all-groups
 	touch $(VENV)/.installed
 
 build: venv

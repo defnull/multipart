@@ -1,9 +1,9 @@
-name: Run tests
+name: Run checks
 
 on: [push, pull_request]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 5
@@ -16,12 +16,46 @@ jobs:
           - "3.13"
           - "3.14"
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
         cache: pip
+    - name: Upgrade pip
+      run: python -m pip install -U pip
     - name: Install dev dependencies
-      run: pip install --group dev -e .
+      run: python -m pip install --group dev -e .
     - name: Run tests
       run: pytest -ra -q --cov=multipart --cov-report=term
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+        cache: pip
+    - name: Upgrade pip
+      run: python -m pip install -U pip
+    - name: Install docs dependencies
+      run: python -m pip install --group docs -e .
+    - name: Build docs
+      run: sphinx-build -W -b html docs build/docs/html
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+        cache: pip
+    - name: Upgrade pip
+      run: python -m pip install -U pip
+    - name: Install build dependencies
+      run: python -m pip install --group dev -e .
+    - name: Build distributions
+      run: python -m build .
+    - name: Check distributions
+      run: python -m twine check dist/*
