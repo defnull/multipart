@@ -338,6 +338,35 @@ class TestPushParser(PushTestBase):
         parts = self.parse(b"--")
         self.assertIsNone(parts[-1])
 
+    def test_segment_size_only_available_after_complete(self):
+        self.parse(b"--boundary\r\n")
+        self.parse(b'Content-Disposition: form-data; name="foo"\r\n')
+        segment = self.parse(b"\r\n")[0]
+
+        with self.assertRaises(multipart.ParserStateError):
+            segment.size
+
+        self.parse(b"hello")
+        self.assertEqual(segment.bytes_received, 5)
+
+        with self.assertRaises(multipart.ParserStateError):
+            segment.size
+
+        self.parse(b"\r\n--boundary--")
+        self.assertTrue(segment.complete)
+        self.assertEqual(segment.bytes_received, 5)
+        self.assertEqual(segment.size, 5)
+
+    def test_segment_size_is_cached_when_complete(self):
+        self.parse(b"--boundary\r\n")
+        self.parse(b'Content-Disposition: form-data; name="foo"\r\n')
+        segment = self.parse(b"\r\nhello\r\n--boundary--")[0]
+
+        self.assertTrue(segment.complete)
+        self.assertEqual(segment.size, 5)
+        segment.bytes_received += 1
+        self.assertEqual(segment.size, 5)
+
     def test_segment_clen(self):
         self.parse(b"--boundary\r\n")
         self.parse(b"Content-Disposition: form-data; name=foo\r\n")

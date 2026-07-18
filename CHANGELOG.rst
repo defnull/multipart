@@ -20,6 +20,10 @@ faster file uploads and 50% faster text field handling.
 
 * change: Dropped support for Python 3.8 and 3.9 (both EOL), added support
   for Python 3.14
+* change: Accessing :attr:`MultipartSegment.size` before the segment is
+  complete now raises :exc:`ParserStateError`. The new attribute
+  :attr:`MultipartSegment.bytes_received` provides the in-progress segment
+  body byte count previously exposed by :attr:`MultipartSegment.size`.
 * change: :class:`PushMultipartParser` now emits :class:`bytes` instead of
   :class:`bytearray` for part body chunks. Update your ``isinstance`` checks
   if you have any.

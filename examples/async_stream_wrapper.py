@@ -174,7 +174,7 @@ class AsyncMultipartPart:
 
     def tell(self):
         """Return the number of bytes already consumed from the segment body."""
-        return self.segment.size - len(self._buffer)
+        return self.segment.bytes_received - len(self._buffer)
 
     async def read_chunk(self, limit=-1) -> bytes:
         """Read and return a single chunk of bytes from the segment body.

@@ -798,16 +798,16 @@ class PushMultipartParser:
 
     def _on_segment_payload(self, chunk: bytes) -> bytes:
         assert self._segment is not None and not self._segment.complete
-        self._segment.size += len(chunk)
-        if self._segment.size > self.max_segment_size:
+        self._segment.bytes_received += len(chunk)
+        if self._segment.bytes_received > self.max_segment_size:
             raise ParserLimitReached("Maximum segment size exceeded")
-        if -1 < self._segment_limit < self._segment.size:
+        if -1 < self._segment_limit < self._segment.bytes_received:
             raise ParserError("Segment Content-Length exceeded")
         return chunk
 
     def _on_segment_complete(self):
         assert self._segment is not None and not self._segment.complete
-        if self._segment.size < self._segment_limit:
+        if self._segment.bytes_received < self._segment_limit:
             raise ParserError("Segment size does not match Content-Length header")
         self._segment.complete = True
         return None
@@ -836,8 +836,8 @@ class MultipartSegment:
     details (e.g. :attr:`name` and :attr:`filename`).
 
     Segment instances do not store or buffer any payload data, but the parser
-    will update the payload :attr:`size` property while parsing, and mark the
-    segment as :attr:`complete` when done.
+    will count :attr:`bytes_received` while parsing, and make the final
+    :attr:`size` available once the segment is :attr:`complete`.
     """
 
     #: Ordered list of headers as (name, value) pairs. Header names are
@@ -860,16 +860,16 @@ class MultipartSegment:
     #: The optional ``'charset'`` option of the ``Content-Type`` header.
     charset: Optional[str]
 
-    #: Segment body size (so far). Will be updated for each chunk of payload
-    #: during parsing.
-    size: int
+    #: Segment body bytes received so far. Will be updated for each chunk of
+    #: payload during parsing.
+    bytes_received: int
     #: True if the parser detected the end of the segment and ``size`` is final.
     complete: bool
 
     def __init__(self, headerlist: List[Tuple[str, str]]):
         """Private constructor used by :class:`PushMultipartParser`"""
 
-        self.size = 0
+        self.bytes_received = 0
         self.complete = False
 
         self.headerlist = headerlist
@@ -887,6 +887,18 @@ class MultipartSegment:
             elif name == "Content-Type":
                 self.content_type, args = parse_options_header(value)
                 self.charset = args.get("charset")
+
+    @cached_property
+    def size(self):
+        """Final segment body size in bytes.
+
+        Only available after the segment is :attr:`complete`. Use
+        :attr:`bytes_received` if you need the in-progress byte count
+        while parsing.
+        """
+        if not self.complete:
+            raise ParserStateError("Segment size not known yet")
+        return self.bytes_received
 
     def header(self, name: str, default=None):
         """Return the value of a header if present, or a default value."""
