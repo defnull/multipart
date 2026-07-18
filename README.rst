@@ -42,7 +42,7 @@ Features
 * Pure python single file module with no dependencies.
 * Optimized for both blocking and non-blocking applications.
 * 100% test coverage with test data from actual browsers and HTTP clients.
-* High throughput and low latency (see `benchmarks <https://github.com/defnull/multipart_bench>`_).
+* High throughput and low latency (see `benchmarks <https://defnull.de/2026/python-multipart-benchmark/>`_).
 * Predictable memory and disk resource consumption via fine grained limits.
 * Strict mode: Spend less time parsing malicious or broken inputs.
 
