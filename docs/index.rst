@@ -37,7 +37,7 @@ easier use in WSGI_ or CGI applications:
 * :ref:`stream-example`: Blocking stream parser that reads from any stream and
   yields memory- or disk-buffered :class:`MultipartPart` instances.
 * :ref:`wsgi-example`: High-level parser functions for WSGI_ or CGI applications
-  with support for both `multipart` and `urlencoded` form submissions.
+  with support for both ``multipart`` and ``urlencoded`` form submissions.
 
 Features and Scope
 ==================

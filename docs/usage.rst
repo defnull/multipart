@@ -26,7 +26,7 @@ the parser itself does not make any assumptions about the IO or concurrency mode
 and can be used in any environment, including coroutines, greenlets or callback-based
 protocol handlers. But it also means that you have to deal with IO yourself.
 
-Here is a low-level example how the parser loop may look like in an `asyncio`
+Here is a low-level example of how the parser loop may look in an ``asyncio``
 based environment:
 
 .. code-block:: python
@@ -50,8 +50,8 @@ based environment:
             print(f"Start of part with name: {event.name}")
             print(f"Headers: {event.headerlist}")
 
-            if current.filename:
-              print(f"Form file upload with filename: {current.filename}")
+            if event.filename:
+              print(f"Form file upload with filename: {event.filename}")
             else:
               print("Form text field without a filename")
 
@@ -77,7 +77,7 @@ Once the end of the multipart stream is reached and the last event was emitted,
 :attr:`closed` will be true. Any errors or exceeded limits during parsing will
 raise :exc:`MultipartError` from the iterator.
 
-Note that the parser is used a context manager here. Closing the parser is
+Note that the parser is used as a context manager here. Closing the parser is
 important to detect missing or incomplete parts caused by a premature end
 of input. You can also close the parser by passing in an empty chunk of data or
 calling :meth:`PushMultipartParser.close` explicitly.
@@ -177,7 +177,7 @@ WSGI Helper
 ===========
 
 The WSGI helper functions :func:`is_form_request` and :func:`parse_form_data`
-accept a `WSGI environ` dictionary and support both types of form submission 
+accept a ``WSGI environ`` dictionary and support both types of form submission
 (``multipart/form-data`` and ``application/x-www-form-urlencoded``) at the same
 time and with the same API. You'll get two fully populated :class:`MultiDict`
 instances in return, one for text fields and the other for file uploads. All
@@ -197,7 +197,7 @@ from a single parser function.
 
 Note that form fields that are too large to fit into memory count as file uploads.
 They will end up as :class:`MultipartPart` instances without a
-:attr:`filename <MultipartPart.filename>` in the `files` dict instead of `forms`.
+:attr:`filename <MultipartPart.filename>` in the ``files`` dict instead of ``forms``.
 This is to protect your app from running out of memory or crashing.
 
 :class:`MultipartPart` instances are buffered to temporary files on disk if they

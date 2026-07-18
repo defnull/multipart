@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This module provides multiple parsers for RFC-7578 `multipart/form-data`, both
+This module provides multiple parsers for RFC-7578 ``multipart/form-data``, both
 low-level for framework authors and high-level for WSGI or ASGI application
 developers.
 
@@ -305,7 +305,7 @@ def parse_options_header(header, options=None, unquote=header_unquote):
     options-dict.
 
     Note: For Content-Disposition headers you need a different unquote function.
-    See `content_disposition_unquote`.
+    See :func:`content_disposition_unquote`.
 
     """
     i = header.find(";")
@@ -321,7 +321,7 @@ def parse_options_header(header, options=None, unquote=header_unquote):
 
 
 def parse_content_disposition(value: str) -> tuple[str, str | None, str | None]:
-    """Specialized parser for standard multipart `Content-Disposition` headers.
+    """Specialized parser for standard multipart ``Content-Disposition`` headers.
 
     Returns a ``(disposition, name, filename)`` tuple. For multipart the ``disposition``
     value should be ``'form-data'``, but this is not enforced. ``name`` and ``filename``
@@ -856,25 +856,25 @@ class MultipartSegment:
     #: whitespace.
     headerlist: List[Tuple[str, str]]
 
-    #: The lower-cased `Content-Disposition` segment header without header
-    #: options. This will be 'form-data' for valid HTTP form submissions.
+    #: The lower-cased ``Content-Disposition`` segment header without header
+    #: options. This will be ``'form-data'`` for valid HTTP form submissions.
     disposition: Optional[str]
-    #: The segment 'name' as specified in the `Content-Disposition` segment
-    #: header. For `form-data` this will always be a string, but the string
+    #: The segment ``'name'`` as specified in the ``Content-Disposition`` segment
+    #: header. For ``form-data`` this will always be a string, but the string
     #: may be empty.
     name: Optional[str]
-    #: An optional 'filename' if specified in the `Content-Disposition` header.
+    #: An optional ``'filename'`` if specified in the ``Content-Disposition`` header.
     filename: Optional[str]
 
-    #: The lower-cased `Content-Type` segment header without header options.
+    #: The lower-cased ``Content-Type`` segment header without header options.
     content_type: Optional[str]
-    #: The optional 'charset' option of the `Content-Type` header.
+    #: The optional ``'charset'`` option of the ``Content-Type`` header.
     charset: Optional[str]
 
     #: Segment body size (so far). Will be updated for each chunk of payload
     #: during parsing.
     size: int
-    #: True if the parser detected the end of the segment and 'size' is final.
+    #: True if the parser detected the end of the segment and ``size`` is final.
     complete: bool
 
     def __init__(self, headerlist: List[Tuple[str, str]]):
@@ -938,14 +938,14 @@ class MultipartParser:
         mem_limit=0,
         memfile_limit=0,
     ):
-        """A parser that reads from a `multipart/form-data` encoded byte stream
+        """A parser that reads from a ``multipart/form-data`` encoded byte stream
         and yields buffered :class:`MultipartPart` instances.
 
         The parse acts as a lazy iterator and will only read and parse as much
         data as needed to return the next part. Results are cached and the same
         part can be requested multiple times without extra cost.
 
-        Note that you should either set `partsize_limit` or `disk_limit` depending
+        Note that you should either set ``partsize_limit`` or ``disk_limit`` depending
         on your specific requirements. Both are unlimited by default.
 
         :param stream: A readable byte stream or any other object that implements
@@ -961,8 +961,8 @@ class MultipartParser:
         :param part_limit: Maximum number of parts.
         :param partsize_limit: Maximum content size of a single part.
         :param spool_limit: Parts up to this size are buffered in memory and count
-          towards `memory_limit`. Larger parts are spooled to temporary files on
-          disk and count towards `disk_limit`.
+          towards ``memory_limit``. Larger parts are spooled to temporary files on
+          disk and count towards ``disk_limit``.
         :param memory_limit: Maximum size of all memory-buffered parts. Should
           be smaller than ``spool_limit * part_limit`` to have an effect.
         :param disk_limit: Maximum size of all disk-buffered parts.
@@ -1100,13 +1100,13 @@ class MultipartPart:
 
     @_cached_property
     def disposition(self) -> str:
-        """The value of the `Content-Disposition` part header."""
+        """The value of the ``Content-Disposition`` part header."""
         return self._segment.header("Content-Disposition")  # type: ignore
 
     @_cached_property
     def content_type(self) -> str:
         """Cleaned up content type provided for this part, or a sensible
-        default (`application/octet-stream` for files and `text/plain` for
+        default (``application/octet-stream`` for files and ``text/plain`` for
         text fields).
         """
         return self._segment.content_type or (
@@ -1191,7 +1191,7 @@ class MultipartPart:
 
 def is_form_request(environ):
     """Return True if the environ represents a form request that can be parsed
-    with :func:`parse_form_data`. Checks for a compatible `Content-Type`
+    with :func:`parse_form_data`. Checks for a compatible ``Content-Type``
     header.
     """
 
@@ -1214,12 +1214,12 @@ def parse_form_data(
 
     The default limits for :class:`MultipartParser` apply, but can be
     overridden via keyword arguments. For url-encoded requests, only
-    `memory_limit` and `part_limit` have an effect. They have the same
+    ``memory_limit`` and ``part_limit`` have an effect. They have the same
     defaults and meaning as with :class:`MultipartParser` and limit the
     total size and the maximum number of form fields to parse.
 
-    :param environ: A WSGI environment dictionary. Only `wsgi.input`,
-        `CONTENT_TYPE` and `CONTENT_LENGTH` are used.
+    :param environ: A WSGI environment dictionary. Only ``wsgi.input``,
+        ``CONTENT_TYPE`` and ``CONTENT_LENGTH`` are used.
     :param charset: The default charset used to decode headers and text fields.
     :param strict: Enables additional format and sanity checks.
     :param ignore_errors: If True, suppress all exceptions. The returned
@@ -1228,7 +1228,7 @@ def parse_form_data(
         strict mode but suppresses errors in non-strict mode.
     :param kwargs: Additional keyword arguments (e.g. limits) passed to
         the :class:`MultipartParser`.
-    :raises MultipartError: See `ignore_errors` parameters.
+    :raises MultipartError: See ``ignore_errors`` parameter.
     """
 
     forms, files = MultiDict(), MultiDict()

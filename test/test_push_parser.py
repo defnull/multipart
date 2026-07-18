@@ -301,7 +301,6 @@ class TestPushParser(PushTestBase):
         self.reset(strict=strict)
         self.parse(b"--boundary\r\n")
         parts = self.parse(b"Content-Disposition: form-data;\r\n\r\n")
-        print(parts)
         self.assertEqual(parts[0].name, "")
 
     def test_segment_count_limit(self):
@@ -539,15 +538,13 @@ class TestPushParser(PushTestBase):
             with self.assertParseError(
                 "Unexpected bytes after boundary"
             ):
-                print(
-                    self.parse(
-                        "--boundary\r\n",
-                        'Content-Disposition: form-data; name="bad"\r\n',
-                        "\r\n",
-                        *content,
-                        "\r\n--boundary--",
-                        "",  # trigger close
-                    )
+                self.parse(
+                    "--boundary\r\n",
+                    'Content-Disposition: form-data; name="bad"\r\n',
+                    "\r\n",
+                    *content,
+                    "\r\n--boundary--",
+                    "",  # trigger close
                 )
 
         assert_bad_content("\r\n--boundary...")

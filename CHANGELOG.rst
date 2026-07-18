@@ -15,16 +15,16 @@ Release 2.0 (not released yet)
 ==============================
 
 This release drops EOL python versions, improves error handling and
-includes multiple performance improvements that can result in upo to 30%
+includes multiple performance improvements that can result in up to 30%
 faster file uploads and 50% faster text field handling.
 
 * change: Dropped support for Python 3.8 and 3.9 (both EOL), added support
   for Python 3.14
-* change: :meth:`PushMultipartParser` now emits :cls:`bytes` instead of
-  :cls:`bytearray` for part body chunks. Update your `isinstance` checks
-  if you have any. 
-* change: Enforce `part_limit` (128 by default) for url-encoded data in
-  `parse_form_data()`. This is consistent with multipart handling and an
+* change: :class:`PushMultipartParser` now emits :class:`bytes` instead of
+  :class:`bytearray` for part body chunks. Update your ``isinstance`` checks
+  if you have any.
+* change: Enforce ``part_limit`` (128 by default) for url-encoded data in
+  ``parse_form_data()``. This is consistent with multipart handling and an
   important safeguard against denial of service attacks.
 * change: New strict-mode check to reject extremely large boundaries.
 * change: Raise more helpful :exc:`ParserStateError` instead of implicit
@@ -33,7 +33,7 @@ faster file uploads and 50% faster text field handling.
 * change: The boundary delimiter must not appear inside a segment body
   (RFC-7578 4.1). This triggers a fatal error now.
 * feat: Hardened (and faster) header validation.
-* build: Change default branch to `main`.
+* build: Change default branch to ``main``.
 
 
 Release 1.3

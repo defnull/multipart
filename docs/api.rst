@@ -24,7 +24,7 @@ Buffered Parser
 
 .. autoclass:: MultipartParser
     :members:
-    :special-members: __iter__, __getitem__
+    :special-members: __iter__
 
 
 .. autoclass:: MultipartPart
@@ -43,7 +43,7 @@ Header parsing
 
 .. autofunction:: parse_options_header
 .. autofunction:: header_quote
-.. autofunction:: header_unquote 
+.. autofunction:: header_unquote
 .. autofunction:: parse_content_disposition
 .. autofunction:: content_disposition_quote
 .. autofunction:: content_disposition_unquote

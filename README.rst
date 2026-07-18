@@ -32,9 +32,9 @@ easier use in WSGI_ or CGI applications:
 * **PushMultipartParser**: Fast SansIO_ (incremental, non-blocking) parser suitable
   for ASGI_, asyncio_ and other IO, time or memory constrained environments.
 * **MultipartParser**: Streaming parser that reads from a byte stream and yields
-  memory- or disk-buffered `MultipartPart` instances.
+  memory- or disk-buffered ``MultipartPart`` instances.
 * **WSGI Helper**: High-level functions and containers for WSGI_ or CGI applications with support
-  for both `multipart` and `urlencoded` form submissions.
+  for both ``multipart`` and ``urlencoded`` form submissions.
 
 Features
 ========
