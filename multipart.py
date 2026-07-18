@@ -52,7 +52,7 @@ from urllib.parse import unquote_plus as _unquote_plus
 from wsgiref.headers import Headers
 from collections.abc import MutableMapping as DictMixin
 import tempfile
-import functools
+from functools import cached_property
 import typing
 from math import inf
 
@@ -197,22 +197,6 @@ def copy_file(stream, target, maxread=-1, buffer_size=2**16):
 
         target.write(part)
         size += len(part)
-
-
-class _cached_property:
-    """A property that is only computed once per instance and then replaces
-    itself with an ordinary attribute. Deleting the attribute resets the
-    property."""
-
-    def __init__(self, func):
-        functools.update_wrapper(self, func)  # type: ignore
-        self.func = func
-
-    def __get__(self, obj, cls):
-        if obj is None:  # pragma: no cover
-            return self
-        value = obj.__dict__[self.func.__name__] = self.func(obj)
-        return value
 
 
 def _is_valid_charset(charset):
@@ -1098,17 +1082,17 @@ class MultipartPart:
         self.memfile_limit = memfile_limit
         self.buffer_size = buffer_size
 
-    @_cached_property
+    @cached_property
     def headers(self) -> Headers:
         """A convenient dict-like holding all part headers."""
         return Headers(self._segment.headerlist)
 
-    @_cached_property
+    @cached_property
     def disposition(self) -> str:
         """The value of the ``Content-Disposition`` part header."""
         return self._segment.header("Content-Disposition")  # type: ignore
 
-    @_cached_property
+    @cached_property
     def content_type(self) -> str:
         """Cleaned up content type provided for this part, or a sensible
         default (``application/octet-stream`` for files and ``text/plain`` for
