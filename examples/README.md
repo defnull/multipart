@@ -41,15 +41,3 @@ async def handle_request(headers: dict[str, str], body_reader: t_AsyncReader):
             print(f"[{len(chunk)} bytes]")
         print(f"Total size: {part.size}")
 ```
-
-## `form_consumer.py`
-
-This example shows a fundamentally different approach to form handling: The
-expected form fields and their handling is defined beforehand, which allows the
-parser to process the multipart segments in order of arrival and fail fast on
-unexpected user input or exceeded limits. Another benefit is that the developer
-can specify the desired location for file uploads and avoid unnecessary copy
-or move operations. Cleanup actions can be triggered automatically in case of
-errors. The API could also be extended to support a rich set of validators and
-stream processors (e.g. compression) as needed.
-
