@@ -1264,7 +1264,9 @@ def parse_form_data(
             if not boundary:
                 raise ParserError("Missing boundary for multipart/form-data")
 
-            for part in MultipartParser(stream, boundary, content_length, **kwargs):
+            for part in MultipartParser(
+                stream, boundary, content_length, strict=strict, **kwargs
+            ):
                 if part.filename or not part.is_buffered():
                     files.append(part.name, part)
                 else:  # TODO: Big form-fields go into the files dict. Really?

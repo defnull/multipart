@@ -26,6 +26,19 @@ class TestFormParser(BaseParserTest):
        self.assertEqual(files['file1'].name, 'file1')
        self.assertEqual(files['file1'].content_type, 'image/png')
 
+    def test_multipart_strict_passed_to_parser(self):
+        self.write(
+            "--foo\r\n",
+            "Content-Disposition: form-data;\r\n",  # no name
+            '\tname="text1"\r\n',
+            "\r\n",
+            "abc",
+            "\r\n--foo--",
+        )
+
+        with self.assertRaises(multipart.StrictParserError):
+            self.parse_form_data(strict=True)
+
     def test_empty(self):
         self.write_end()
         forms, files = self.parse_form_data()
