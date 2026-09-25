@@ -733,8 +733,10 @@ class PushMultipartParser:
         if line[0] in b" \t":  # Multi-line header value
             if not self._segment_headerlist or self.strict:
                 raise StrictParserError("Unexpected segment header continuation")
+            if line.isspace():
+                raise StrictParserError("Empty segment header continuation")
             prev = ": ".join(self._segment_headerlist.pop())
-            line = prev.encode(self.header_charset) + b" " + line.strip()
+            line = prev.encode(self.header_charset) + b" " + line[1:]
 
         # Enforce header limits
         if len(line) > self.max_header_size:
@@ -753,7 +755,7 @@ class PushMultipartParser:
             name = name.strip().title()
             if name not in _KNOWN_HEADERS and not _re_hname.fullmatch(name):
                 raise ParserError("Invalid segment header name")
-        value = value.strip()
+        value = value.lstrip(" \t")
 
         if name == "Content-Length":
             if self._segment_limit >= 0:

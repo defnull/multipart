@@ -241,6 +241,36 @@ class TestPushParser(PushTestBase):
         with self.assertParseError("Maximum segment header length exceeded"):
             self.parse(b"\tmoooooooooooooooooooooooooore value\r\n")
 
+    def test_header_continuation_empty(self):
+        self.reset(max_header_size=64)
+        self.parse(b"--boundary\r\n")
+        self.parse(b"Content-Disposition: form-data; name=foo\r\n")
+        with self.assertRaises(multipart.StrictParserError):
+            self.parse(b" \r\n")
+
+    def test_header_continuation_unicode_whitespace_only(self):
+        self.reset(max_header_size=64)
+        self.parse(b"--boundary\r\n")
+        self.parse(b"Content-Disposition: form-data; name=foo\r\n")
+        with self.assertRaises(multipart.StrictParserError):
+            self.parse(b"  \r\n")
+
+    def test_header_continuation_long_whitespace_padded(self):
+        self.reset(max_header_size=64)
+        self.parse(b"--boundary\r\n")
+        self.parse(b"Content-Disposition: form-data; name=foo\r\n")
+        with self.assertRaises(multipart.ParserLimitReached):
+            self.parse(b" " * 65 + b"value\r\n")
+
+    def test_header_continuation_many_unicode_whitespace(self):
+        self.reset(max_header_size=64)
+        self.parse(b"--boundary\r\n")
+        self.parse(b"Content-Disposition: form-data; name=foo\r\n")
+        # This bypasses the strict whitespace-only checks inside continuation
+        # logic which operate on bytes, but should still hit the header size limit.
+        with self.assertRaises(multipart.ParserLimitReached):
+            self.parse(b" \xc2\xa0\r\n" * 32)
+
     def test_header_no_colon(self):
         with self.assertParseError("Malformed segment header"):
             self.parse(b"--boundary\r\nno-colon\r\n\r\ndata\r\n--boundary--")
