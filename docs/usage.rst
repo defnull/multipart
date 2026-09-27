@@ -29,7 +29,10 @@ protocol handlers. But it also means that you have to deal with IO yourself.
 Here is a low-level example of how the parser loop may look in an ``asyncio``
 based environment:
 
+.. _push-parse-example:
+
 .. code-block:: python
+  :caption: Low-level parsing example
 
   import asyncio
   import multipart
@@ -86,39 +89,40 @@ Dealing with IO
 ---------------
 
 The :meth:`parse() <PushMultipartParser.parse>` method does not know how to
-fetch more data. It just stops yielding events and waits for you to call it
-again with the next chunk. This low-level mode of operation is very flexible,
-but sometimes more complicated than it needs to be.
+fetch more data. If it runs out of data to parse, it will just stop yielding events
+and wait for you to call it again with the next chunk. This low-level mode of
+operation is very flexible and can be adapted to any environment, but requires some
+boilerplate.
 
-If you can provide some blocking or async function that returns the next chunk
-when called, then you can skip some of the complexity of
-:meth:`parse() <PushMultipartParser.parse>` and use
-:meth:`parse_blocking() <PushMultipartParser.parse_blocking>` or
-:meth:`parse_async() <PushMultipartParser.parse_async>` instead.
+For the most common IO sources :class:`PushMultipartParser` provides convenient helper
+methods that deal with IO, parser state and cleanup.
 
-Here is what the parser loop may look like in a *blocking* environment. Instead
-of an abstract blocking stream you could also read from a socket or ``environ[wsgi.input]``:
+* :meth:`PushMultipartParser.parse_blocking` to parse from a blocking stream, for example `wsgi.input` or a raw socket.
+* :meth:`PushMultipartParser.parse_async` to parse from an async stream, as provided by many async web frameworks (e.g. aiohttp).
+* :meth:`PushMultipartParser.parse_async_iterable` to parse an async chunk iterator or generator, also common with async web frameworks (e.g. fastapi/starlette).
 
-.. code-block:: python
-
-    import multipart, io
-
-    def blocking_example(stream: io.BufferedIOBase, boundary: str):
-      with multipart.PushMultipartParser(boundary) as parser:
-        for event in parser.parse_blocking(stream.read):
-          pass  # Handle parser events
-
-And here is the same loop with an *awaitable* stream:
+Each helper yields the same parser events as :meth:`parse() <PushMultipartParser.parse>`,
+but as a single continuous iterator that is way easier to consume. The nested loops and
+with-blocks from the :ref:`push-parse-example` can be reduced to a single for-loop:
 
 .. code-block:: python
 
-    import multipart, asyncio
+    parser = multipart.PushMultipartParser(boundary='--example')
 
-    async def async_example(stream: asyncio.StreamReader, boundary: str):
-      with multipart.PushMultipartParser(boundary) as parser:
-        async for event in parser.parse_async(stream.read):
-          pass  # Handle parser events
+    # Blocking stream, e.g. WSGI
+    stream: io.BufferedIOBase = environ['wsgi.input']
+    for event in parser.parse_blocking(stream.read):
+      pass  # Handle parser events
 
+    # Async stream, e.g. aiohttp
+    stream: asyncio.StreamReader = Request.content
+    async for event in parser.parse_async(stream.read):
+      pass  # Handle parser events
+
+    # Async iterable, e.g. fastapi/starlette
+    chunks: multipart.t_AsyncByteIter = Request.stream()
+    async for event in parser.parse_async_iterable(chunks):
+      pass  # Handle parser events
 
 .. _stream-example:
 

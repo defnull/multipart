@@ -3,13 +3,19 @@ Changelog
 =========
 
 This project follows Semantic Versioning (``major.minor.patch``), with the
-exception that behavior changes are allowed in minor releases as long as the
-change corrects behavior to match documentation, specification or
+exception that behavior changes are allowed in minor or patch releases as long
+as the change corrects behavior to match documentation, specification or
 expectation. In other words: Bugfixes do not count as backward incompatible
 changes, even if they technically change behavior from *incorrect* to *correct*
 and may break applications that rely on *incorrect* or *undefined* behavior or
 *undocumented* APIs. EOL Python versions may also be dropped during *minor*
 releases. 
+
+Release 2.1 (Not released yet)
+==============================
+
+* Added: :meth:`PushMultipartParser.parse_async_iterable` helper method.
+
 
 Release 2.0
 ===========

@@ -11,7 +11,7 @@ License: MIT (see LICENSE file)
 """
 
 __author__ = "Marcel Hellkamp"
-__version__ = '2.0.1'
+__version__ = '2.1.0-dev'
 __license__ = "MIT"
 __all__ = [
     "MultipartError",
@@ -64,7 +64,7 @@ t_BlockingReader: "typing.TypeAlias" = Callable[[int], t_ByteString]
 t_BlockingWriter: "typing.TypeAlias" = Callable[[t_ByteString], int]
 t_AsyncReader: "typing.TypeAlias" = Callable[[int], Awaitable[t_ByteString]]
 t_AsyncWriter: "typing.TypeAlias" = Callable[[t_ByteString], Awaitable[int]]
-
+t_AsyncByteIter: "typing.TypeAlias" = typing.AsyncIterable[t_ByteString]
 
 ##
 ### Exceptions
@@ -639,8 +639,8 @@ class PushMultipartParser:
         self, read: t_AsyncReader, chunk_size=1024 * 64
     ) -> AsyncGenerator[t_ParserEvent, None]:
         """Parse the entire multipart stream by reading chunks from an async
-        ``read(size)`` function. The returned async generator yields parser
-        events similar to :meth:`parse` and can be used in ``async for`` loops.
+        ``read(size)`` function. Return an async generator yielding the same
+        parser events as :meth:`parse`.
 
         The async ``read(size)`` function should read and return up to ``size``
         bytes of data per call. Returning an empty chunk signals the end of the
@@ -675,12 +675,36 @@ class PushMultipartParser:
                 for event in self.parse(chunk):
                     yield event
 
+    async def parse_async_iterable(
+        self, chunks: t_AsyncByteIter
+    ) -> AsyncGenerator[t_ParserEvent, None]:
+        """Parse the entire multipart stream from an async interable yielding non-empty
+        chunks of data. Return an async generator yielding the same parser events as
+        :meth:`parse`.
+
+        The parser will stop requesting chunks once the end of the multipart stream is
+        detected, even if more data is available.
+
+        :param chunks: An async iterable yielding chunks of input data.
+        :yields: Parser events (see :meth:`parse`)
+        :raises Exception: Exceptions raised by the inout iterable are not handled.
+        :raises MultipartError: Same as :meth:`parse`.
+
+        .. versionadded:: 2.1
+        """
+        with self:
+            async for chunk in chunks:
+                if self.closed:
+                    break
+                for event in self.parse(chunk):
+                    yield event
+
     def parse_blocking(
         self, read: t_BlockingReader, chunk_size=1024 * 64
     ) -> Generator[t_ParserEvent, None, None]:
         """Parse the entire multipart stream by reading chunks from a blocking
-        ``read(size)`` function. The returned generator yields parser events
-        similar to :meth:`parse` and can be used in ``for`` loops.
+        ``read(size)`` function. Return a blocking generator yielding the same
+        parser events as :meth:`parse`.
 
         The blocking ``read(size)`` function should read and return up to
         ``size`` bytes of data per call. Returning an empty chunk signals the
